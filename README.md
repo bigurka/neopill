@@ -22,6 +22,8 @@ paziente e un dispositivo HA per ogni farmaco.
   sidebar di Home Assistant, separato da Lovelace.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
   per l'uso da automazioni.
+- Sensore riepilogativo `sensor.neopill_farmaci_da_rifornire`: conta e lista i farmaci con scorta stimata
+  tra 7 e 14 giorni, con un testo già formattato pronto per una notifica/email (vedi sotto).
 
 ## Installazione
 
@@ -43,6 +45,33 @@ installazione Home Assistant, poi riavvia.
 Dopo l'installazione, l'integrazione aggiunge una voce **NeoPill** nella sidebar: da lì si creano/gestiscono
 pazienti e farmaci. Le azioni quotidiane (assumi ora, segna come non assunta, rifornisci) sono disponibili
 sia dal pannello sia come entità/servizi standard di Home Assistant.
+
+## Promemoria rifornimento via email
+
+NeoPill non gestisce l'invio di email direttamente (niente credenziali SMTP dentro l'integrazione): prepara
+solo i dati, tramite il sensore `sensor.neopill_farmaci_da_rifornire`. L'invio vero e proprio va fatto con
+un'automazione HA che usa un servizio `notify.*` email già configurato (es. l'integrazione nativa `smtp`,
+oppure Gmail/altri). Esempio:
+
+```yaml
+automation:
+  - alias: "NeoPill - promemoria rifornimento farmaci"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    condition:
+      - condition: numeric_state
+        entity_id: sensor.neopill_farmaci_da_rifornire
+        above: 0
+    action:
+      - service: notify.smtp   # sostituisci con il tuo servizio notify email
+        data:
+          title: "NeoPill: farmaci da rifornire"
+          message: "{{ state_attr('sensor.neopill_farmaci_da_rifornire', 'testo') }}"
+```
+
+L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, paziente, giorni rimanenti,
+scorta) se preferisci costruire un messaggio personalizzato invece di usare il testo già pronto.
 
 ## Permessi
 
