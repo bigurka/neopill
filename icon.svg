@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1de9ff"/>
+      <stop offset="100%" stop-color="#0033a0"/>
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff5b5b"/>
+      <stop offset="100%" stop-color="#a00000"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="256" height="256" rx="48" fill="#05070d"/>
+
+  <g opacity="0.16" fill="#00ff6a" font-family="monospace" font-size="14">
+    <text x="10" y="24">01 10 01 11 00 10</text>
+    <text x="4" y="46">10 00 11 01 10 01</text>
+    <text x="14" y="68">11 01 00 10 01 11</text>
+    <text x="8" y="212">01 11 10 00 01 10</text>
+    <text x="12" y="234">10 01 11 10 00 01</text>
+  </g>
+
+  <g transform="translate(128,128) rotate(-40)">
+    <rect x="-84" y="-24" width="168" height="48" rx="24" fill="url(#blueGrad)"/>
+    <rect x="-84" y="-24" width="84" height="48" rx="24" fill="url(#blueGrad)"/>
+    <rect x="0" y="-24" width="84" height="48" rx="24" fill="url(#redGrad)"/>
+    <rect x="-84" y="-24" width="168" height="48" rx="24" fill="none" stroke="#05070d" stroke-width="4"/>
+    <line x1="0" y1="-24" x2="0" y2="24" stroke="#05070d" stroke-width="4"/>
+    <rect x="-84" y="-24" width="168" height="18" rx="9" fill="url(#highlight)"/>
+  </g>
+</svg>

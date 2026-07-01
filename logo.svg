@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" width="640" height="200">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1de9ff"/>
+      <stop offset="100%" stop-color="#0033a0"/>
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff5b5b"/>
+      <stop offset="100%" stop-color="#a00000"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="640" height="200" rx="28" fill="#05070d"/>
+
+  <g opacity="0.14" fill="#00ff6a" font-family="monospace" font-size="13">
+    <text x="8" y="20">01 10 01 11 00 10 01 11 10 00 01 10 11 01 00</text>
+    <text x="8" y="188">10 00 11 01 10 01 10 00 01 11 10 01 11 00 10</text>
+  </g>
+
+  <g transform="translate(100,100) rotate(-40)">
+    <rect x="-64" y="-18" width="128" height="36" rx="18" fill="url(#blueGrad)"/>
+    <rect x="0" y="-18" width="64" height="36" rx="18" fill="url(#redGrad)"/>
+    <rect x="-64" y="-18" width="128" height="36" rx="18" fill="none" stroke="#05070d" stroke-width="3"/>
+    <line x1="0" y1="-18" x2="0" y2="18" stroke="#05070d" stroke-width="3"/>
+    <rect x="-64" y="-18" width="128" height="14" rx="7" fill="url(#highlight)"/>
+  </g>
+
+  <text x="185" y="122" font-family="'Segoe UI', Arial, sans-serif" font-size="64" font-weight="700" fill="#f5f7ff">Neo<tspan fill="#ff5b5b">P</tspan>ill</text>
+</svg>

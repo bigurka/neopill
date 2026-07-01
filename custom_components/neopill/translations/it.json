@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configura NeoPill",
+        "description": "Aggiunge il pannello NeoPill nella sidebar, da cui gestire pazienti e farmaci. Non c'è nulla da configurare qui."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "NeoPill è già configurato. È consentita solo un'istanza."
+    }
+  }
+}

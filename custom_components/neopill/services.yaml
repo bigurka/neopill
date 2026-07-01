@@ -1,0 +1,61 @@
+assumi_farmaco:
+  name: Assumi farmaco
+  description: Registra l'assunzione di una dose di un farmaco, scalando la scorta.
+  fields:
+    medication_id:
+      name: Farmaco
+      description: ID del farmaco.
+      required: true
+      selector:
+        text:
+    amount:
+      name: Quantità
+      description: Quantità assunta. Se omessa, viene usata la dose configurata per il farmaco.
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.25
+          mode: box
+
+segna_non_assunta:
+  name: Segna come non assunta
+  description: Dichiara che una dose pianificata non è stata assunta, senza scalare la scorta.
+  fields:
+    medication_id:
+      name: Farmaco
+      description: ID del farmaco.
+      required: true
+      selector:
+        text:
+
+rifornisci_farmaco:
+  name: Rifornisci farmaco
+  description: >-
+    Aggiunge scorta a un farmaco, per quantità diretta oppure per numero di confezioni
+    (usa la dimensione confezione configurata sul farmaco).
+  fields:
+    medication_id:
+      name: Farmaco
+      description: ID del farmaco.
+      required: true
+      selector:
+        text:
+    amount:
+      name: Quantità
+      description: Unità da aggiungere direttamente. Alternativa a "packages".
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 0.25
+          mode: box
+    packages:
+      name: Confezioni
+      description: Numero di confezioni da aggiungere. Alternativa a "amount".
+      required: false
+      selector:
+        number:
+          min: 0
+          step: 1
+          mode: box
