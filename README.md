@@ -85,6 +85,18 @@ Il pannello (`custom_components/neopill/panel_dist/`) è scritto in JavaScript n
 ES standard, nessuna dipendenza esterna): non è previsto alcuno step di build, i file in `panel_dist/` sono
 i sorgenti stessi e vengono serviti così come sono.
 
+## Icona (brand)
+
+L'icona/logo che compare in Impostazioni → Dispositivi e servizi viene letta da
+`custom_components/neopill/brand/` (icon.png, icon@2x.png, logo.png, logo@2x.png) — funzionalità
+disponibile da Home Assistant 2026.3 in poi, che permette a un'integrazione custom di fornire le proprie
+immagini di brand senza passare da una PR al repository esterno `home-assistant/brands`. Su versioni di HA
+precedenti alla 2026.3 questa cartella viene ignorata e resta il placeholder generico.
+
+Le stesse immagini (più le versioni SVG sorgente `icon.svg`/`logo.svg`) sono presenti anche nella radice del
+repository: servono per la scheda HACS e per il badge in cima a questo README, che sono cose distinte
+dall'icona nella lista integrazioni.
+
 ## Stato del progetto
 
 v0.1.0: prima versione funzionale (backend + pannello). Non ancora testata su un'istanza Home Assistant
