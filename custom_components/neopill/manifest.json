@@ -4,11 +4,11 @@
   "codeowners": ["@bigurka"],
   "config_flow": true,
   "dependencies": ["http", "frontend", "websocket_api"],
-  "single_config_entry": true,
+  "documentation": "https://github.com/bigurka/neopill",
   "integration_type": "hub",
   "iot_class": "calculated",
-  "documentation": "https://github.com/bigurka/neopill",
   "issue_tracker": "https://github.com/bigurka/neopill/issues",
   "requirements": [],
+  "single_config_entry": true,
   "version": "0.1.1"
 }
