@@ -23,11 +23,13 @@ from .const import (
     INTAKE_STATUS_TAKEN,
     SCHEDULE_TYPE_FIXED_TIMES,
     SCHEDULE_TYPE_INTERVAL,
+    SCHEDULE_TYPE_WEEKLY,
     SIGNAL_DOSE_DUE_CHANGED,
     SIGNAL_INTAKE_RECORDED,
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
     SIGNAL_MEDICATION_UPDATED,
+    WEEKDAY_KEYS,
 )
 from .models import DoseSchedule, IntakeEvent, Medication
 from .storage import NeoPillStore
@@ -69,6 +71,24 @@ def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | 
         if not schedule.interval_hours:
             return None
         return reference + timedelta(hours=schedule.interval_hours)
+    if schedule.schedule_type == SCHEDULE_TYPE_WEEKLY:
+        if not schedule.weekly_times:
+            return None
+        candidates: list[datetime] = []
+        for day_offset in range(0, 8):
+            day = reference + timedelta(days=day_offset)
+            times = schedule.weekly_times.get(WEEKDAY_KEYS[day.weekday()])
+            if not times:
+                continue
+            for time_str in times:
+                parsed = _parse_time_str(time_str)
+                if parsed is None:
+                    continue
+                hour, minute = parsed
+                candidate = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if candidate > reference:
+                    candidates.append(candidate)
+        return min(candidates) if candidates else None
     return None
 
 

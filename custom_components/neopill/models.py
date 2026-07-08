@@ -15,6 +15,7 @@ from .const import (
     INTAKE_STATUS_TAKEN,
     SCHEDULE_TYPE_FIXED_TIMES,
     SCHEDULE_TYPE_INTERVAL,
+    SCHEDULE_TYPE_WEEKLY,
 )
 
 
@@ -58,6 +59,8 @@ class DoseSchedule:
     schedule_type: str = SCHEDULE_TYPE_FIXED_TIMES
     fixed_times: list[str] = field(default_factory=list)
     interval_hours: float | None = None
+    # schedule_type == "weekly": e.g. {"tue": ["08:00", "20:00"], "fri": ["09:00"]}
+    weekly_times: dict[str, list[str]] = field(default_factory=dict)
 
     def daily_doses_count(self) -> float:
         """Doses per day implied by this schedule, used for consumption-rate estimates."""
@@ -65,6 +68,9 @@ class DoseSchedule:
             return float(len(self.fixed_times))
         if self.schedule_type == SCHEDULE_TYPE_INTERVAL and self.interval_hours:
             return 24.0 / self.interval_hours
+        if self.schedule_type == SCHEDULE_TYPE_WEEKLY and self.weekly_times:
+            total = sum(len(times) for times in self.weekly_times.values())
+            return total / 7.0
         return 0.0
 
     def as_dict(self) -> dict[str, Any]:
@@ -72,6 +78,7 @@ class DoseSchedule:
             "schedule_type": self.schedule_type,
             "fixed_times": list(self.fixed_times),
             "interval_hours": self.interval_hours,
+            "weekly_times": {day: list(times) for day, times in self.weekly_times.items()},
         }
 
     @classmethod
@@ -80,6 +87,9 @@ class DoseSchedule:
             schedule_type=data.get("schedule_type", SCHEDULE_TYPE_FIXED_TIMES),
             fixed_times=list(data.get("fixed_times", [])),
             interval_hours=data.get("interval_hours"),
+            weekly_times={
+                day: list(times) for day, times in data.get("weekly_times", {}).items()
+            },
         )
 
 

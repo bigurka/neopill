@@ -16,6 +16,7 @@ from homeassistant.components.websocket_api.const import ERR_INVALID_FORMAT, ERR
 from homeassistant.core import HomeAssistant
 
 from .actions import async_mark_missed, async_restock, async_take_dose
+from .const import WEEKDAY_KEYS
 from .models import DoseSchedule, Medication
 from .runtime import get_runtime_data
 from .storage import MedicationNotFoundError, PatientNotFoundError
@@ -26,9 +27,12 @@ _TIME_STR_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 _DOSE_SCHEDULE_SCHEMA = vol.Schema(
     {
-        vol.Required("schedule_type"): vol.In(["fixed_times", "interval"]),
+        vol.Required("schedule_type"): vol.In(["fixed_times", "interval", "weekly"]),
         vol.Optional("fixed_times", default=list): [vol.Match(_TIME_STR_RE)],
         vol.Optional("interval_hours"): vol.Coerce(float),
+        vol.Optional("weekly_times", default=dict): {
+            vol.In(WEEKDAY_KEYS): [vol.Match(_TIME_STR_RE)]
+        },
     }
 )
 

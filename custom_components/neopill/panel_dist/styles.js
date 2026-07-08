@@ -134,8 +134,18 @@ export const styles = `
   .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
   [data-role="fixed-times-list"] { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
-  .time-row { display: flex; align-items: center; gap: 6px; }
+  .time-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
   .time-row input[type="time"] { flex: 1; }
+
+  .weekly-day {
+    border: 1px solid var(--divider-color, #3a3f4d);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+  }
+  .weekly-day-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .weekly-day-toggle input[type="checkbox"] { margin: 0; }
+  [data-role="weekly-day-times"] { margin-top: 8px; padding-left: 24px; }
 
   .empty-state { opacity: 0.6; padding: 24px; text-align: center; }
   .error-banner {

@@ -30,6 +30,30 @@ function esc(value) {
   }[c]));
 }
 
+const WEEK_DAYS = [
+  ["mon", "Lunedì"],
+  ["tue", "Martedì"],
+  ["wed", "Mercoledì"],
+  ["thu", "Giovedì"],
+  ["fri", "Venerdì"],
+  ["sat", "Sabato"],
+  ["sun", "Domenica"],
+];
+const DAY_LABELS_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Gio", fri: "Ven", sat: "Sab", sun: "Dom" };
+
+function timeRowHtml(value, removeAction) {
+  return `<div class="time-row">
+    <input type="time" data-role="${removeAction === "remove-time-row" ? "fixed-time-value" : "weekly-time-value"}" value="${esc(value)}" required>
+    <button type="button" class="iconbtn" data-action="${removeAction}" title="Rimuovi">&#10005;</button>
+  </div>`;
+}
+
+function weeklyScheduleText(weeklyTimes) {
+  const entries = Object.entries(weeklyTimes || {}).filter(([, times]) => times && times.length);
+  if (!entries.length) return "Nessun giorno impostato";
+  return entries.map(([day, times]) => `${DAY_LABELS_SHORT[day] || day} ${times.join(",")}`).join(" · ");
+}
+
 class NeoPillPanel extends HTMLElement {
   constructor() {
     super();
@@ -238,6 +262,8 @@ class NeoPillPanel extends HTMLElement {
     const scheduleText =
       m.dose_schedule.schedule_type === "fixed_times"
         ? `Orari: ${m.dose_schedule.fixed_times.join(", ") || "-"}`
+        : m.dose_schedule.schedule_type === "weekly"
+        ? weeklyScheduleText(m.dose_schedule.weekly_times)
         : `Ogni ${m.dose_schedule.interval_hours ?? "-"} ore dall'ultima assunzione`;
 
     const adminActions = this._isAdmin
@@ -308,6 +334,7 @@ class NeoPillPanel extends HTMLElement {
             ? [...medication.dose_schedule.fixed_times]
             : ["08:00"],
           interval_hours: medication.dose_schedule.interval_hours ?? "",
+          weekly_times: medication.dose_schedule.weekly_times || {},
           notes: medication.notes || "",
         }
       : {
@@ -320,6 +347,7 @@ class NeoPillPanel extends HTMLElement {
           schedule_type: "fixed_times",
           fixed_times: ["08:00", "20:00"],
           interval_hours: "",
+          weekly_times: {},
           notes: "",
         };
     const d = this._medDraft;
@@ -355,27 +383,38 @@ class NeoPillPanel extends HTMLElement {
           <label>Tipo di schema dose</label>
           <select name="schedule_type" data-role="schedule-type">
             <option value="fixed_times" ${d.schedule_type === "fixed_times" ? "selected" : ""}>Orari fissi al giorno</option>
+            <option value="weekly" ${d.schedule_type === "weekly" ? "selected" : ""}>Giorni della settimana</option>
             <option value="interval" ${d.schedule_type === "interval" ? "selected" : ""}>Intervallo dall'ultima assunzione</option>
           </select>
         </div>
-        <div class="field" data-role="fixed-times-field" style="${d.schedule_type === "interval" ? "display:none" : ""}">
+        <div class="field" data-role="fixed-times-field" style="${d.schedule_type === "fixed_times" ? "" : "display:none"}">
           <label>Orari</label>
           <div data-role="fixed-times-list">
-            ${d.fixed_times
-              .map(
-                (t) => `
-              <div class="time-row">
-                <input type="time" data-role="fixed-time-value" value="${esc(t)}" required>
-                <button type="button" class="iconbtn" data-action="remove-time-row" title="Rimuovi">&#10005;</button>
-              </div>`
-              )
-              .join("")}
+            ${d.fixed_times.map((t) => timeRowHtml(t, "remove-time-row")).join("")}
           </div>
           <button type="button" class="small" data-action="add-time-row">+ Aggiungi orario</button>
         </div>
-        <div class="field" data-role="interval-field" style="${d.schedule_type === "fixed_times" ? "display:none" : ""}">
+        <div class="field" data-role="interval-field" style="${d.schedule_type === "interval" ? "" : "display:none"}">
           <label>Intervallo (ore)</label>
           <input name="interval_hours" type="number" step="0.5" min="0.5" value="${d.interval_hours}">
+        </div>
+        <div class="field" data-role="weekly-field" style="${d.schedule_type === "weekly" ? "" : "display:none"}">
+          <label>Giorni e orari</label>
+          ${WEEK_DAYS.map(([key, label]) => {
+            const times = d.weekly_times[key] || [];
+            const enabled = times.length > 0;
+            return `
+            <div class="weekly-day" data-day="${key}">
+              <label class="weekly-day-toggle">
+                <input type="checkbox" data-role="weekly-day-enabled" ${enabled ? "checked" : ""}>
+                ${label}
+              </label>
+              <div data-role="weekly-day-times" style="${enabled ? "" : "display:none"}">
+                ${times.map((t) => timeRowHtml(t, "remove-weekly-time-row")).join("")}
+                <button type="button" class="small" data-action="add-weekly-time-row">+ Aggiungi orario</button>
+              </div>
+            </div>`;
+          }).join("")}
         </div>
         <div class="field">
           <label>Note</label>
@@ -395,9 +434,19 @@ class NeoPillPanel extends HTMLElement {
   _handleChange(e) {
     if (e.target.matches('[data-role="schedule-type"]')) {
       const dialog = this.shadowRoot.getElementById("medDialog");
-      const isInterval = e.target.value === "interval";
-      dialog.querySelector('[data-role="fixed-times-field"]').style.display = isInterval ? "none" : "";
-      dialog.querySelector('[data-role="interval-field"]').style.display = isInterval ? "" : "none";
+      const type = e.target.value;
+      dialog.querySelector('[data-role="fixed-times-field"]').style.display = type === "fixed_times" ? "" : "none";
+      dialog.querySelector('[data-role="interval-field"]').style.display = type === "interval" ? "" : "none";
+      dialog.querySelector('[data-role="weekly-field"]').style.display = type === "weekly" ? "" : "none";
+    }
+    if (e.target.matches('[data-role="weekly-day-enabled"]')) {
+      const dayBlock = e.target.closest(".weekly-day");
+      const timesDiv = dayBlock.querySelector('[data-role="weekly-day-times"]');
+      timesDiv.style.display = e.target.checked ? "" : "none";
+      if (e.target.checked && !timesDiv.querySelector('[data-role="weekly-time-value"]')) {
+        const addBtn = timesDiv.querySelector('[data-action="add-weekly-time-row"]');
+        addBtn.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row"));
+      }
     }
   }
 
@@ -450,16 +499,16 @@ class NeoPillPanel extends HTMLElement {
           const list = this.shadowRoot
             .getElementById("medDialog")
             .querySelector('[data-role="fixed-times-list"]');
-          list.insertAdjacentHTML(
-            "beforeend",
-            `<div class="time-row">
-              <input type="time" data-role="fixed-time-value" value="08:00" required>
-              <button type="button" class="iconbtn" data-action="remove-time-row" title="Rimuovi">&#10005;</button>
-            </div>`
-          );
+          list.insertAdjacentHTML("beforeend", timeRowHtml("08:00", "remove-time-row"));
           break;
         }
         case "remove-time-row":
+          el.closest(".time-row").remove();
+          break;
+        case "add-weekly-time-row":
+          el.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row"));
+          break;
+        case "remove-weekly-time-row":
           el.closest(".time-row").remove();
           break;
         case "take-dose":
@@ -527,6 +576,20 @@ class NeoPillPanel extends HTMLElement {
             interval_hours:
               scheduleType === "interval" && data.get("interval_hours")
                 ? Number(data.get("interval_hours"))
+                : undefined,
+            weekly_times:
+              scheduleType === "weekly"
+                ? Array.from(form.querySelectorAll(".weekly-day")).reduce((acc, dayBlock) => {
+                    const enabled = dayBlock.querySelector('[data-role="weekly-day-enabled"]').checked;
+                    if (!enabled) return acc;
+                    const times = Array.from(
+                      dayBlock.querySelectorAll('[data-role="weekly-time-value"]')
+                    )
+                      .map((input) => input.value)
+                      .filter(Boolean);
+                    if (times.length) acc[dayBlock.dataset.day] = times;
+                    return acc;
+                  }, {})
                 : undefined,
           },
           notes: data.get("notes") || "",

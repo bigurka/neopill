@@ -28,6 +28,10 @@ RESTOCK_REMINDER_MAX_DAYS = 14
 
 SCHEDULE_TYPE_FIXED_TIMES = "fixed_times"
 SCHEDULE_TYPE_INTERVAL = "interval"
+SCHEDULE_TYPE_WEEKLY = "weekly"
+
+# Monday-first, matching Python's date.weekday() (Monday == 0)
+WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 INTAKE_STATUS_TAKEN = "taken"
 INTAKE_STATUS_MISSED = "missed"

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -18,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .actions import async_mark_missed, async_restock, async_take_dose
 from .const import (
     SCHEDULE_TYPE_FIXED_TIMES,
+    SCHEDULE_TYPE_WEEKLY,
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
     SIGNAL_MEDICATION_UPDATED,
@@ -49,6 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
     )
 
     slot_manager = TimeSlotButtonManager(hass, store, scheduler, async_add_entities)
+    slot_manager.async_cleanup_orphans(entry.entry_id)
     slot_manager.async_recompute()
     for signal in (SIGNAL_MEDICATION_ADDED, SIGNAL_MEDICATION_UPDATED, SIGNAL_MEDICATION_REMOVED):
         entry.async_on_unload(async_dispatcher_connect(hass, signal, slot_manager.async_recompute))
@@ -104,6 +107,16 @@ class RestockPackageButton(NeoPillMedicationEntity, ButtonEntity):
         await async_restock(self._store, self._medication_id, packages=1)
 
 
+def _medication_uses_time(medication: Medication, time_str: str) -> bool:
+    """True if this medication has `time_str` configured, fixed-daily or weekly."""
+    schedule = medication.dose_schedule
+    if schedule.schedule_type == SCHEDULE_TYPE_FIXED_TIMES:
+        return time_str in schedule.fixed_times
+    if schedule.schedule_type == SCHEDULE_TYPE_WEEKLY:
+        return any(time_str in times for times in schedule.weekly_times.values())
+    return False
+
+
 class _TimeSlotButtonBase(ButtonEntity):
     """Shared plumbing for the per-patient, per-time-slot group action buttons."""
 
@@ -135,8 +148,7 @@ class _TimeSlotButtonBase(ButtonEntity):
         return [
             medication
             for medication in self._store.list_medications(patient_id=self._patient_id)
-            if medication.dose_schedule.schedule_type == SCHEDULE_TYPE_FIXED_TIMES
-            and self._time_str in medication.dose_schedule.fixed_times
+            if _medication_uses_time(medication, self._time_str)
         ]
 
 
@@ -185,13 +197,39 @@ class TimeSlotButtonManager:
         self._async_add_entities = async_add_entities
         self._entities: dict[tuple[str, str], list[ButtonEntity]] = {}
 
+    def async_cleanup_orphans(self, entry_id: str) -> None:
+        """One-time startup sweep for ghost registry entries from before this
+        manager properly deregistered obsolete time-slot buttons (fixed
+        prospectively in async_recompute/_async_fully_remove) - without this,
+        those entries linger forever as permanently "unavailable" entities."""
+        wanted_unique_ids: set[str] = set()
+        for patient_id, time_str in self._current_groups():
+            wanted_unique_ids.add(f"{patient_id}_{time_str}_assumi_tutti")
+            wanted_unique_ids.add(f"{patient_id}_{time_str}_segna_tutti_non_assunti")
+
+        registry = er.async_get(self._hass)
+        for reg_entry in er.async_entries_for_config_entry(registry, entry_id):
+            if reg_entry.domain != "button" or not reg_entry.unique_id:
+                continue
+            if not (
+                reg_entry.unique_id.endswith("_assumi_tutti")
+                or reg_entry.unique_id.endswith("_segna_tutti_non_assunti")
+            ):
+                continue
+            if reg_entry.unique_id not in wanted_unique_ids:
+                registry.async_remove(reg_entry.entity_id)
+
     def _current_groups(self) -> set[tuple[str, str]]:
         groups: set[tuple[str, str]] = set()
         for medication in self._store.list_medications():
-            if medication.dose_schedule.schedule_type != SCHEDULE_TYPE_FIXED_TIMES:
-                continue
-            for time_str in medication.dose_schedule.fixed_times:
-                groups.add((medication.patient_id, time_str))
+            schedule = medication.dose_schedule
+            if schedule.schedule_type == SCHEDULE_TYPE_FIXED_TIMES:
+                for time_str in schedule.fixed_times:
+                    groups.add((medication.patient_id, time_str))
+            elif schedule.schedule_type == SCHEDULE_TYPE_WEEKLY:
+                for times in schedule.weekly_times.values():
+                    for time_str in times:
+                        groups.add((medication.patient_id, time_str))
         return groups
 
     @callback
@@ -201,7 +239,7 @@ class TimeSlotButtonManager:
 
         for key in existing - wanted:
             for entity in self._entities.pop(key):
-                self._hass.async_create_task(entity.async_remove(force_remove=True))
+                self._hass.async_create_task(self._async_fully_remove(entity))
 
         new_entities: list[ButtonEntity] = []
         for key in wanted - existing:
@@ -212,3 +250,17 @@ class TimeSlotButtonManager:
             new_entities.extend([take, missed])
         if new_entities:
             self._async_add_entities(new_entities)
+
+    async def _async_fully_remove(self, entity: ButtonEntity) -> None:
+        """Remove the entity's live state *and* its entity_registry entry.
+
+        entity.async_remove() alone only detaches it from hass.states - the
+        registry entry is a separate record that otherwise lingers forever,
+        showing up as a permanently "unavailable" ghost entity.
+        """
+        entity_id = entity.entity_id
+        await entity.async_remove(force_remove=True)
+        if entity_id:
+            registry = er.async_get(self._hass)
+            if registry.async_get(entity_id) is not None:
+                registry.async_remove(entity_id)

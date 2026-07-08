@@ -24,7 +24,9 @@ paziente e un dispositivo HA per ogni farmaco.
   e stabili nel tempo anche se lo rinomini dopo, per non rompere automazioni/dashboard.
 - Eliminando un paziente vengono rimossi automaticamente tutti i suoi farmaci, il calendario e le altre
   entità collegate (cancellazione a cascata tramite il device hub del paziente).
-- Dosaggio a orari fissi o a intervallo dall'ultima assunzione, con dose anche frazionaria (es. 1/2, 1/4).
+- Dosaggio a orari fissi al giorno, a giorni della settimana con orari indipendenti giorno per giorno (es.
+  martedì e venerdì, con orari diversi tra loro), oppure a intervallo dall'ultima assunzione — con dose
+  anche frazionaria (es. 1/2, 1/4).
 - Rifornimento per quantità diretta o per numero di confezioni.
 - **Pulsanti raggruppati per ora di assunzione**: per ogni orario fisso in comune tra i farmaci di un
   paziente vengono creati automaticamente due pulsanti — "Assumi tutti ore HH:MM" e "Segna tutti non
