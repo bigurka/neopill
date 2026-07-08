@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://buymeacoffee.com/bigurka"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
+</p>
+
+<p align="center">
   🇮🇹 <a href="#italiano">Italiano</a> · 🇬🇧 <a href="#english">English</a>
 </p>
 
@@ -157,6 +161,10 @@ automatico invece di restare "fantasmi" non disponibili. Fa eccezione lo slug de
 consonanti), calcolato una sola volta alla creazione: per applicarlo a pazienti creati prima che esistesse,
 serve ricrearli.
 
+## Supporto
+
+Se NeoPill ti è utile e vuoi offrirmi un caffè: [buymeacoffee.com/bigurka](https://buymeacoffee.com/bigurka).
+
 ## Licenza
 
 MIT
@@ -304,6 +312,10 @@ code-side - on the first restart after such an update, existing medications and 
 the new entity_ids/names, and the old entity registry entries are cleaned up automatically instead of
 lingering as unavailable "ghosts". The one exception is the patient slug (first 3 consonants), computed
 once at creation time: to apply it to patients created before it existed, you need to recreate them.
+
+## Support
+
+If NeoPill is useful to you and you'd like to buy me a coffee: [buymeacoffee.com/bigurka](https://buymeacoffee.com/bigurka).
 
 ## License
 
