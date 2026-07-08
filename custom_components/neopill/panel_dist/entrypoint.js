@@ -278,7 +278,7 @@ class NeoPillPanel extends HTMLElement {
 
     main.innerHTML = `
       ${errorBanner}
-      ${cards || `<div class="empty-state">${this.t("no_medications")}</div>`}
+      ${cards ? `<div class="med-grid">${cards}</div>` : `<div class="empty-state">${this.t("no_medications")}</div>`}
       <section class="history">
         <h3>${this.t("history_title")}</h3>
         ${

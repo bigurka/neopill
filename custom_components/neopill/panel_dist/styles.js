@@ -20,43 +20,46 @@ export const styles = `
   .header .pill-logo { width: 32px; height: 32px; flex: none; }
   .header h1 { font-size: 20px; margin: 0; flex: 1; }
 
-  .main { overflow-y: auto; padding: 16px 20px; height: calc(100% - 105px); }
+  .main { overflow-y: auto; padding: 16px 20px; height: calc(100% - 150px); }
 
   .patient-toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
     flex-wrap: wrap;
-    padding: 10px 20px;
+    padding: 22px 24px;
     border-bottom: 1px solid var(--divider-color, #2a2e3a);
   }
-  .toolbar-sep { width: 1px; height: 24px; background: var(--divider-color, #3a3f4d); margin: 0 2px; }
+  .toolbar-sep { width: 1px; height: 40px; background: var(--divider-color, #3a3f4d); margin: 0 4px; }
   .toolbar-spacer { flex: 1; }
   .patient-toolbar select {
-    padding: 6px 9px;
-    border-radius: 6px;
+    padding: 14px 18px;
+    border-radius: 8px;
     border: 1px solid var(--divider-color, #3a3f4d);
     background: rgba(255, 255, 255, 0.04);
     color: inherit;
     font: inherit;
+    font-size: 24px;
+    min-width: 220px;
   }
   .threshold-field {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 13px;
+    gap: 8px;
+    font-size: 18px;
     opacity: 0.85;
     white-space: nowrap;
   }
   .threshold-field input[type="number"] {
-    width: 56px;
-    padding: 5px 7px;
-    border-radius: 6px;
+    width: 80px;
+    padding: 10px 12px;
+    border-radius: 8px;
     border: 1px solid var(--divider-color, #3a3f4d);
     background: rgba(255, 255, 255, 0.04);
     color: inherit;
+    font-size: 18px;
   }
-  .patient-toolbar button.iconbtn { font-size: 20px; line-height: 1; padding: 6px 10px; opacity: 0.9; }
+  .patient-toolbar button.iconbtn { font-size: 30px; line-height: 1; padding: 10px 16px; opacity: 0.9; }
   .patient-toolbar button.iconbtn.danger { color: #ff8a8a; }
 
   button {
@@ -86,11 +89,18 @@ export const styles = `
   button.iconbtn:hover { opacity: 1; }
   button:disabled { opacity: 0.4; cursor: default; }
 
+  .med-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
   .med-card {
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--divider-color, #2a2e3a);
     border-radius: 12px;
     padding: 14px 16px;
-    margin-bottom: 12px;
     background: rgba(255, 255, 255, 0.02);
   }
   .med-card .title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -107,7 +117,7 @@ export const styles = `
   .med-card .meta { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; opacity: 0.85; margin-bottom: 10px; }
   .med-card .meta b { color: var(--primary-text-color, #e8eaf0); font-weight: 600; }
 
-  .med-card .action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .med-card .action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: auto; padding-top: 10px; }
   .med-card .restock-form { display: flex; gap: 6px; align-items: center; }
   .med-card input[type="number"] {
     width: 70px;
