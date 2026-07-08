@@ -63,13 +63,13 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
 class StockSensor(NeoPillMedicationEntity, SensorEntity):
     """Current stock quantity for a medication."""
 
-    _attr_name = "Scorta"
+    _attr_translation_key = "stock"
     _attr_native_unit_of_measurement = "unità"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:pill"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "scorta", "sensor")
+        super().__init__(store, medication_id, "stock", "sensor")
 
     @property
     def native_value(self) -> float | None:
@@ -94,13 +94,13 @@ class StockSensor(NeoPillMedicationEntity, SensorEntity):
 class DaysRemainingSensor(NeoPillMedicationEntity, SensorEntity):
     """Estimated days of stock remaining, based on the dose schedule's consumption rate."""
 
-    _attr_name = "Giorni rimanenti"
+    _attr_translation_key = "days_remaining"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "giorni_rimanenti", "sensor")
+        super().__init__(store, medication_id, "days_remaining", "sensor")
 
     @property
     def native_value(self) -> float | None:
@@ -128,12 +128,12 @@ class DaysRemainingSensor(NeoPillMedicationEntity, SensorEntity):
 class NextDoseSensor(NeoPillMedicationEntity, SensorEntity):
     """Timestamp of the next (or currently due) dose."""
 
-    _attr_name = "Prossima assunzione"
+    _attr_translation_key = "next_dose"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:clock-alert-outline"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "prossima_assunzione", "sensor")
+        super().__init__(store, medication_id, "next_dose", "sensor")
         self._scheduler = scheduler
 
     @property
@@ -166,7 +166,7 @@ class RestockReminderSensor(SensorEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Farmaci da rifornire"
+    _attr_translation_key = "restock_reminder"
     _attr_icon = "mdi:pill-multiple"
     _attr_should_poll = False
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -174,10 +174,10 @@ class RestockReminderSensor(SensorEntity):
     def __init__(self, store: NeoPillStore, patient_id: str) -> None:
         self._store = store
         self._patient_id = patient_id
-        self._attr_unique_id = f"{patient_id}_farmaci_da_rifornire"
+        self._attr_unique_id = f"{patient_id}_restock_reminder"
         patient = store.patients.get(patient_id)
         if patient is not None:
-            self.entity_id = f"sensor.{patient.slug}_farmaci_da_rifornire"
+            self.entity_id = f"sensor.{patient.slug}_restock_reminder"
 
     @property
     def available(self) -> bool:

@@ -41,11 +41,11 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
 class DoseDueBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
     """On while a scheduled dose is due and has not been taken or declared missed."""
 
-    _attr_name = "Da assumere"
+    _attr_translation_key = "dose_due"
     _attr_icon = "mdi:pill-multiple"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "da_assumere", "binary_sensor")
+        super().__init__(store, medication_id, "dose_due", "binary_sensor")
         self._scheduler = scheduler
 
     @property
@@ -67,12 +67,12 @@ class DoseDueBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
 class LowStockBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
     """On when estimated days of stock remaining drop at or below the configured threshold."""
 
-    _attr_name = "Scorta in esaurimento"
+    _attr_translation_key = "low_stock"
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_icon = "mdi:package-variant-closed-remove"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "scorta_in_esaurimento", "binary_sensor")
+        super().__init__(store, medication_id, "low_stock", "binary_sensor")
 
     @property
     def is_on(self) -> bool:

@@ -9,5 +9,27 @@
     "abort": {
       "single_instance_allowed": "NeoPill is already configured. Only one instance is allowed."
     }
+  },
+  "entity": {
+    "sensor": {
+      "stock": { "name": "Stock" },
+      "days_remaining": { "name": "Days remaining" },
+      "next_dose": { "name": "Next dose" },
+      "restock_reminder": { "name": "Medications to reorder" }
+    },
+    "binary_sensor": {
+      "dose_due": { "name": "Dose due" },
+      "low_stock": { "name": "Low stock" }
+    },
+    "button": {
+      "take_dose": { "name": "Take dose" },
+      "mark_missed": { "name": "Mark as missed" },
+      "restock_package": { "name": "Restock (1 package)" },
+      "take_all": { "name": "Take all at {time}" },
+      "mark_all_missed": { "name": "Mark all missed at {time}" }
+    },
+    "calendar": {
+      "calendar": { "name": "Calendar" }
+    }
   }
 }

@@ -1,9 +1,9 @@
 """Button platform for NeoPill.
 
 Two kinds of buttons:
-- per-medication quick actions (assumi ora / segna non assunta / rifornisci 1 confezione)
-- per-patient, per-time-slot group actions: one "assumi tutti" / "segna tutti non
-  assunti" pair for every distinct fixed dose time in use by that patient's
+- per-medication quick actions (take dose / mark missed / restock 1 package)
+- per-patient, per-time-slot group actions: one "take all" / "mark all missed"
+  pair for every distinct fixed dose time in use by that patient's
   medications, letting a single press act on every medication scheduled at that
   exact time. Dynamically created/removed as medications are added/edited/removed.
 """
@@ -60,11 +60,11 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
 class TakeDoseButton(NeoPillMedicationEntity, ButtonEntity):
     """Records one dose (the medication's configured amount) taken right now."""
 
-    _attr_name = "Assumi ora"
+    _attr_translation_key = "take_dose"
     _attr_icon = "mdi:pill"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "assumi_ora", "button")
+        super().__init__(store, medication_id, "take_dose", "button")
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
@@ -74,11 +74,11 @@ class TakeDoseButton(NeoPillMedicationEntity, ButtonEntity):
 class MarkMissedButton(NeoPillMedicationEntity, ButtonEntity):
     """Explicitly declares the currently due dose as not taken."""
 
-    _attr_name = "Segna come non assunta"
+    _attr_translation_key = "mark_missed"
     _attr_icon = "mdi:pill-off"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "segna_non_assunta", "button")
+        super().__init__(store, medication_id, "mark_missed", "button")
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
@@ -92,11 +92,11 @@ class RestockPackageButton(NeoPillMedicationEntity, ButtonEntity):
     there is nothing to compute "one package" from.
     """
 
-    _attr_name = "Rifornisci (1 confezione)"
+    _attr_translation_key = "restock_package"
     _attr_icon = "mdi:package-variant-plus"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "rifornisci_confezione", "button")
+        super().__init__(store, medication_id, "restock_package", "button")
 
     @property
     def available(self) -> bool:
@@ -124,13 +124,14 @@ class _TimeSlotButtonBase(ButtonEntity):
     _attr_should_poll = False
 
     def __init__(
-        self, store: NeoPillStore, patient_id: str, time_str: str, key: str, name_prefix: str
+        self, store: NeoPillStore, patient_id: str, time_str: str, key: str, translation_key: str
     ) -> None:
         self._store = store
         self._patient_id = patient_id
         self._time_str = time_str
         self._attr_unique_id = f"{patient_id}_{time_str}_{key}"
-        self._attr_name = f"{name_prefix} ore {time_str}"
+        self._attr_translation_key = translation_key
+        self._attr_translation_placeholders = {"time": time_str}
         patient = store.patients.get(patient_id)
         slug = patient.slug if patient else "pz"
         self.entity_id = f"button.{slug}_{key}_{time_str.replace(':', '')}"
@@ -158,7 +159,7 @@ class TimeSlotTakeButton(_TimeSlotButtonBase):
     _attr_icon = "mdi:pill-multiple"
 
     def __init__(self, store: NeoPillStore, scheduler, patient_id: str, time_str: str) -> None:
-        super().__init__(store, patient_id, time_str, "assumi_tutti", "Assumi tutti")
+        super().__init__(store, patient_id, time_str, "take_all", "take_all")
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
@@ -172,7 +173,7 @@ class TimeSlotMissedButton(_TimeSlotButtonBase):
     _attr_icon = "mdi:pill-off"
 
     def __init__(self, store: NeoPillStore, scheduler, patient_id: str, time_str: str) -> None:
-        super().__init__(store, patient_id, time_str, "segna_tutti_non_assunti", "Segna tutti non assunti")
+        super().__init__(store, patient_id, time_str, "mark_all_missed", "mark_all_missed")
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
@@ -197,6 +198,16 @@ class TimeSlotButtonManager:
         self._async_add_entities = async_add_entities
         self._entities: dict[tuple[str, str], list[ButtonEntity]] = {}
 
+    # Recognizes both the current (English) and legacy pre-v0.5.0 (Italian)
+    # unique_id suffixes, so renaming these keys doesn't leave the old ones as
+    # permanent ghosts - the wanted-set diff below removes anything not current.
+    _KNOWN_SUFFIXES = (
+        "_take_all",
+        "_mark_all_missed",
+        "_assumi_tutti",
+        "_segna_tutti_non_assunti",
+    )
+
     def async_cleanup_orphans(self, entry_id: str) -> None:
         """One-time startup sweep for ghost registry entries from before this
         manager properly deregistered obsolete time-slot buttons (fixed
@@ -204,17 +215,14 @@ class TimeSlotButtonManager:
         those entries linger forever as permanently "unavailable" entities."""
         wanted_unique_ids: set[str] = set()
         for patient_id, time_str in self._current_groups():
-            wanted_unique_ids.add(f"{patient_id}_{time_str}_assumi_tutti")
-            wanted_unique_ids.add(f"{patient_id}_{time_str}_segna_tutti_non_assunti")
+            wanted_unique_ids.add(f"{patient_id}_{time_str}_take_all")
+            wanted_unique_ids.add(f"{patient_id}_{time_str}_mark_all_missed")
 
         registry = er.async_get(self._hass)
         for reg_entry in er.async_entries_for_config_entry(registry, entry_id):
             if reg_entry.domain != "button" or not reg_entry.unique_id:
                 continue
-            if not (
-                reg_entry.unique_id.endswith("_assumi_tutti")
-                or reg_entry.unique_id.endswith("_segna_tutti_non_assunti")
-            ):
+            if not reg_entry.unique_id.endswith(self._KNOWN_SUFFIXES):
                 continue
             if reg_entry.unique_id not in wanted_unique_ids:
                 registry.async_remove(reg_entry.entity_id)

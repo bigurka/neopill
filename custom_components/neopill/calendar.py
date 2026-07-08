@@ -61,7 +61,7 @@ class PatientCalendarEntity(CalendarEntity):
     """Calendar of intakes/missed doses/restocks for a single patient."""
 
     _attr_has_entity_name = True
-    _attr_name = "Calendario"
+    _attr_translation_key = "calendar"
     _attr_should_poll = False
     _attr_icon = "mdi:calendar-heart"
 

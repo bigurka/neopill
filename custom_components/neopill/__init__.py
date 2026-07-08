@@ -13,6 +13,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .const import DOMAIN, SIGNAL_MEDICATION_REMOVED, SIGNAL_PATIENT_REMOVED
 from .coordinator import DoseScheduler
 from .entity import patient_hub_identifier
+from .migrations import async_cleanup_legacy_entities
 from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services, async_unload_services
 from .storage import NeoPillStore
@@ -50,6 +51,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> b
     await scheduler.async_setup()
 
     entry.runtime_data = NeoPillRuntimeData(store=store, scheduler=scheduler)
+
+    async_cleanup_legacy_entities(hass, entry.entry_id)
 
     device_registry = dr.async_get(hass)
 

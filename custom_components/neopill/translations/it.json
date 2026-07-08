@@ -9,5 +9,27 @@
     "abort": {
       "single_instance_allowed": "NeoPill è già configurato. È consentita solo un'istanza."
     }
+  },
+  "entity": {
+    "sensor": {
+      "stock": { "name": "Scorta" },
+      "days_remaining": { "name": "Giorni rimanenti" },
+      "next_dose": { "name": "Prossima assunzione" },
+      "restock_reminder": { "name": "Farmaci da rifornire" }
+    },
+    "binary_sensor": {
+      "dose_due": { "name": "Da assumere" },
+      "low_stock": { "name": "Scorta in esaurimento" }
+    },
+    "button": {
+      "take_dose": { "name": "Assumi ora" },
+      "mark_missed": { "name": "Segna come non assunta" },
+      "restock_package": { "name": "Rifornisci (1 confezione)" },
+      "take_all": { "name": "Assumi tutti ore {time}" },
+      "mark_all_missed": { "name": "Segna tutti non assunti ore {time}" }
+    },
+    "calendar": {
+      "calendar": { "name": "Calendario" }
+    }
   }
 }

@@ -40,7 +40,7 @@ paziente e un dispositivo HA per ogni farmaco.
   dalla toolbar del pannello, pensate per raggruppare più farmaci possibile in un'unica commissione —
   minimi = non aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di
   rifiuto del medico per prescrizione anticipata). Il sensore per paziente
-  `sensor.‹slug›_farmaci_da_rifornire` elenca i farmaci il cui "giorni rimanenti" rientra in quella
+  `sensor.‹slug›_restock_reminder` elenca i farmaci il cui "giorni rimanenti" rientra in quella
   finestra, con un testo già formattato pronto per una notifica/email (vedi sotto) e, per ciascun farmaco,
   la data di esaurimento prevista.
 
@@ -71,8 +71,8 @@ elimina) — disponibili anche come entità/servizi standard di Home Assistant.
 ## Promemoria rifornimento via email
 
 NeoPill non gestisce l'invio di email direttamente (niente credenziali SMTP dentro l'integrazione): prepara
-solo i dati, tramite un sensore per paziente `sensor.‹slug_paziente›_farmaci_da_rifornire` (es.
-`sensor.mrr_farmaci_da_rifornire` per "Mario Rossi"). L'invio vero e proprio va fatto con un'automazione HA
+solo i dati, tramite un sensore per paziente `sensor.‹slug_paziente›_restock_reminder` (es.
+`sensor.mrr_restock_reminder` per "Mario Rossi"). L'invio vero e proprio va fatto con un'automazione HA
 che usa un servizio `notify.*` email già configurato (es. l'integrazione nativa `smtp`, oppure Gmail/altri).
 Esempio (sostituisci l'entity_id con quello del tuo paziente):
 
@@ -84,13 +84,13 @@ automation:
         at: "08:00:00"
     condition:
       - condition: numeric_state
-        entity_id: sensor.mrr_farmaci_da_rifornire
+        entity_id: sensor.mrr_restock_reminder
         above: 0
     action:
       - service: notify.smtp   # sostituisci con il tuo servizio notify email
         data:
           title: "NeoPill: farmaci da rifornire"
-          message: "{{ state_attr('sensor.mrr_farmaci_da_rifornire', 'testo') }}"
+          message: "{{ state_attr('sensor.mrr_restock_reminder', 'testo') }}"
 ```
 
 L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, giorni rimanenti, scorta) se
@@ -123,19 +123,23 @@ dall'icona nella lista integrazioni.
 
 ## Stato del progetto
 
-v0.2.0: backend + pannello, con device/entity_id organizzati per paziente (vedi Funzionalità). Non ancora
+v0.5.0: backend + pannello, con device/entity_id organizzati per paziente (vedi Funzionalità). Non ancora
 del tutto testata su un'istanza Home Assistant reale: prima di un uso in produzione, verificare
 l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali
 (creazione paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un
 ambiente di test.
 
-**Nota per chi ha già dati di test da una versione precedente**: gli entity_id non vengono rinominati
-retroattivamente (per non rompere eventuali automazioni). Per vedere applicato il nuovo schema
-(prefisso paziente, device raggruppati) su farmaci/pazienti già creati, elimina e ricrea quei pazienti.
+**Entity_id in inglese, nomi visualizzati localizzati**: gli identificatori tecnici (`sensor.mrr_stock`,
+`button.mrr_take_dose`, ecc.) sono in inglese e stabili; i nomi mostrati nell'interfaccia ("Scorta",
+"Assumi ora", ...) seguono invece la lingua configurata in Home Assistant (italiano/inglese per ora),
+tramite il meccanismo nativo di traduzione delle entità — non serve nessuna configurazione, cambia da solo
+in base alla lingua del tuo utente HA.
 
-**Prossimo passo pianificato**: entity_id in inglese con friendly name localizzati in base alla lingua di
-sistema — rimandato di proposito a dopo aver testato e validato quanto sopra, per non cambiare due volte lo
-schema degli identificatori nello stesso periodo.
+**Nota su questo specifico cambio**: a differenza del prefisso-paziente (dato calcolato una volta alla
+creazione del paziente, quindi serve ricreare per applicarlo ai vecchi dati), il passaggio a chiavi inglesi
+è puramente lato codice: al primo riavvio dopo l'aggiornamento, farmaci e pazienti già esistenti ottengono
+automaticamente i nuovi entity_id/nomi, e le vecchie voci nel registro entità (con lo schema italiano)
+vengono ripulite in automatico invece di restare "fantasmi" non disponibili.
 
 ## Licenza
 
