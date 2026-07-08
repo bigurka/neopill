@@ -107,7 +107,9 @@ creare, modificare o eliminare pazienti e farmaci.
 
 Il pannello (`custom_components/neopill/panel_dist/`) è scritto in JavaScript nativo (Web Component, moduli
 ES standard, nessuna dipendenza esterna): non è previsto alcuno step di build, i file in `panel_dist/` sono
-i sorgenti stessi e vengono serviti così come sono.
+i sorgenti stessi e vengono serviti così come sono. Le stringhe dell'interfaccia (IT/EN) sono in
+`panel_dist/i18n.js` — per aggiungere una lingua basta un'altra voce nell'oggetto `STRINGS` e un caso in
+più in `resolveLang()`.
 
 ## Icona (brand)
 
@@ -133,7 +135,8 @@ ambiente di test.
 `button.mrr_take_dose`, ecc.) sono in inglese e stabili; i nomi mostrati nell'interfaccia ("Scorta",
 "Assumi ora", ...) seguono invece la lingua configurata in Home Assistant (italiano/inglese per ora),
 tramite il meccanismo nativo di traduzione delle entità — non serve nessuna configurazione, cambia da solo
-in base alla lingua del tuo utente HA.
+in base alla lingua del tuo utente HA. Anche il **pannello** (la pagina in sidebar) segue la stessa regola:
+italiano se `hass.language` è italiano, inglese altrimenti — nessun selettore di lingua separato.
 
 **Nota su questo specifico cambio**: a differenza del prefisso-paziente (dato calcolato una volta alla
 creazione del paziente, quindi serve ricreare per applicarlo ai vecchi dati), il passaggio a chiavi inglesi

@@ -3,22 +3,16 @@
 
 import { api } from "./api.js";
 import { styles } from "./styles.js";
+import { resolveLang, translate } from "./i18n.js";
 
-const EVENT_LABELS = {
-  assunta: "Assunta",
-  non_assunta: "Non assunta",
-  rifornimento: "Rifornimento",
-  scorta_esaurita: "Scorta esaurita",
+const EVENT_TYPE_KEYS = {
+  assunta: "event_taken",
+  non_assunta: "event_missed",
+  rifornimento: "event_restock",
+  scorta_esaurita: "event_depleted",
 };
 
-function fmtDateTime(iso) {
-  if (!iso) return "-";
-  try {
-    return new Date(iso).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" });
-  } catch (err) {
-    return iso;
-  }
-}
+const WEEK_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({
@@ -30,28 +24,11 @@ function esc(value) {
   }[c]));
 }
 
-const WEEK_DAYS = [
-  ["mon", "Lunedì"],
-  ["tue", "Martedì"],
-  ["wed", "Mercoledì"],
-  ["thu", "Giovedì"],
-  ["fri", "Venerdì"],
-  ["sat", "Sabato"],
-  ["sun", "Domenica"],
-];
-const DAY_LABELS_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Gio", fri: "Ven", sat: "Sab", sun: "Dom" };
-
-function timeRowHtml(value, removeAction) {
+function timeRowHtml(value, removeAction, removeTitle) {
   return `<div class="time-row">
     <input type="time" data-role="${removeAction === "remove-time-row" ? "fixed-time-value" : "weekly-time-value"}" value="${esc(value)}" required>
-    <button type="button" class="iconbtn" data-action="${removeAction}" title="Rimuovi">&#10005;</button>
+    <button type="button" class="iconbtn" data-action="${removeAction}" title="${esc(removeTitle)}">&#10005;</button>
   </div>`;
-}
-
-function weeklyScheduleText(weeklyTimes) {
-  const entries = Object.entries(weeklyTimes || {}).filter(([, times]) => times && times.length);
-  if (!entries.length) return "Nessun giorno impostato";
-  return entries.map(([day, times]) => `${DAY_LABELS_SHORT[day] || day} ${times.join(",")}`).join(" · ");
 }
 
 class NeoPillPanel extends HTMLElement {
@@ -84,6 +61,36 @@ class NeoPillPanel extends HTMLElement {
 
   get _isAdmin() {
     return !!(this._hass && this._hass.user && this._hass.user.is_admin);
+  }
+
+  get _lang() {
+    return resolveLang(this._hass);
+  }
+
+  t(key, vars) {
+    return translate(this._lang, key, vars);
+  }
+
+  _fmtDateTime(iso) {
+    if (!iso) return "-";
+    try {
+      const locale = this._lang === "it" ? "it-IT" : "en-GB";
+      return new Date(iso).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+    } catch (err) {
+      return iso;
+    }
+  }
+
+  _weekDays() {
+    return WEEK_DAY_KEYS.map((key) => [key, this.t(`day_${key}`)]);
+  }
+
+  _weeklyScheduleText(weeklyTimes) {
+    const entries = Object.entries(weeklyTimes || {}).filter(([, times]) => times && times.length);
+    if (!entries.length) return this.t("no_days_set");
+    return entries
+      .map(([day, times]) => `${this.t(`day_short_${day}`)} ${times.join(",")}`)
+      .join(" · ");
   }
 
   async _init() {
@@ -121,7 +128,7 @@ class NeoPillPanel extends HTMLElement {
       this._patients = await api.listPatients(this._hass);
       this._error = null;
     } catch (err) {
-      this._error = `Errore nel caricamento pazienti: ${err.message || err}`;
+      this._error = this.t("error_loading_patients", { error: err.message || err });
     }
     this._loadingPatients = false;
     if (this._selectedPatientId && !this._patients.some((p) => p.id === this._selectedPatientId)) {
@@ -160,7 +167,7 @@ class NeoPillPanel extends HTMLElement {
       );
       this._error = null;
     } catch (err) {
-      this._error = `Errore nel caricamento farmaci: ${err.message || err}`;
+      this._error = this.t("error_loading_medications", { error: err.message || err });
     }
     this._loadingMedications = false;
     this._renderMain();
@@ -173,7 +180,7 @@ class NeoPillPanel extends HTMLElement {
     if (!toolbar) return;
 
     if (this._loadingPatients) {
-      toolbar.innerHTML = `<div class="patient-toolbar"><span class="empty-state">Caricamento...</span></div>`;
+      toolbar.innerHTML = `<div class="patient-toolbar"><span class="empty-state">${this.t("loading")}</span></div>`;
       return;
     }
 
@@ -186,15 +193,15 @@ class NeoPillPanel extends HTMLElement {
       <div class="patient-toolbar">
         ${
           this._isAdmin
-            ? `<button class="iconbtn" data-action="new-patient" title="Aggiungi paziente">&#43;</button>`
+            ? `<button class="iconbtn" data-action="new-patient" title="${this.t("add_patient")}">&#43;</button>`
             : ""
         }
         <select data-role="patient-select" ${this._patients.length ? "" : "disabled"}>
-          ${this._patients.length ? options : `<option>Nessun paziente</option>`}
+          ${this._patients.length ? options : `<option>${this.t("no_patients_option")}</option>`}
         </select>
         ${
           patient && this._isAdmin
-            ? `<button class="iconbtn" data-action="edit-patient" data-id="${patient.id}" title="Rinomina paziente">&#9998;</button>`
+            ? `<button class="iconbtn" data-action="edit-patient" data-id="${patient.id}" title="${this.t("rename_patient_action")}">&#9998;</button>`
             : ""
         }
         ${
@@ -202,26 +209,26 @@ class NeoPillPanel extends HTMLElement {
             ? `
           <span class="toolbar-sep"></span>
           <label class="threshold-field">
-            Giorni minimi
+            ${this.t("min_days")}
             <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}">
           </label>
           <label class="threshold-field">
-            Giorni massimi
+            ${this.t("max_days")}
             <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}">
           </label>
           ${
             this._isAdmin
               ? `
             <span class="toolbar-sep"></span>
-            <button class="iconbtn" data-action="new-medication" title="Aggiungi farmaco">&#43;</button>
-            <button class="iconbtn danger" data-action="delete-patient" data-id="${patient.id}" title="Elimina paziente">&#128465;</button>
+            <button class="iconbtn" data-action="new-medication" title="${this.t("add_medication")}">&#43;</button>
+            <button class="iconbtn danger" data-action="delete-patient" data-id="${patient.id}" title="${this.t("delete_patient")}">&#128465;</button>
           `
               : ""
           }`
             : ""
         }
         <span class="toolbar-spacer"></span>
-        <button class="iconbtn" data-action="refresh" title="Aggiorna">&#x21bb;</button>
+        <button class="iconbtn" data-action="refresh" title="${this.t("refresh")}">&#x21bb;</button>
       </div>
     `;
   }
@@ -235,12 +242,12 @@ class NeoPillPanel extends HTMLElement {
     const errorBanner = this._error ? `<div class="error-banner">${esc(this._error)}</div>` : "";
 
     if (!this._selectedPatientId) {
-      main.innerHTML = `${errorBanner}<div class="empty-state">Seleziona un paziente dal menu in alto, oppure aggiungine uno.</div>`;
+      main.innerHTML = `${errorBanner}<div class="empty-state">${this.t("select_patient_prompt")}</div>`;
       return;
     }
 
     if (this._loadingMedications) {
-      main.innerHTML = `${errorBanner}<div class="empty-state">Caricamento...</div>`;
+      main.innerHTML = `${errorBanner}<div class="empty-state">${this.t("loading")}</div>`;
       return;
     }
 
@@ -249,25 +256,27 @@ class NeoPillPanel extends HTMLElement {
     const historyRows = [...this._history]
       .reverse()
       .slice(0, 50)
-      .map(
-        (e) => `<tr>
-          <td>${fmtDateTime(e.timestamp)}</td>
-          <td>${esc(EVENT_LABELS[e.type] || e.type)}</td>
+      .map((e) => {
+        const typeKey = EVENT_TYPE_KEYS[e.type];
+        const label = typeKey ? this.t(typeKey) : e.type;
+        return `<tr>
+          <td>${this._fmtDateTime(e.timestamp)}</td>
+          <td>${esc(label)}</td>
           <td>${esc(e.medication_name)}</td>
           <td>${e.amount !== undefined ? e.amount : e.amount_added !== undefined ? "+" + e.amount_added : ""}</td>
-        </tr>`
-      )
+        </tr>`;
+      })
       .join("");
 
     main.innerHTML = `
       ${errorBanner}
-      ${cards || `<div class="empty-state">Nessun farmaco per questo paziente.</div>`}
+      ${cards || `<div class="empty-state">${this.t("no_medications")}</div>`}
       <section class="history">
-        <h3>Storico (ultimi 30 giorni)</h3>
+        <h3>${this.t("history_title")}</h3>
         ${
           historyRows
-            ? `<table class="history"><thead><tr><th>Quando</th><th>Evento</th><th>Farmaco</th><th>Qtà</th></tr></thead><tbody>${historyRows}</tbody></table>`
-            : `<div class="empty-state">Nessun evento registrato.</div>`
+            ? `<table class="history"><thead><tr><th>${this.t("col_when")}</th><th>${this.t("col_event")}</th><th>${this.t("col_medication")}</th><th>${this.t("col_qty")}</th></tr></thead><tbody>${historyRows}</tbody></table>`
+            : `<div class="empty-state">${this.t("no_history")}</div>`
         }
       </section>
     `;
@@ -275,20 +284,20 @@ class NeoPillPanel extends HTMLElement {
 
   _renderMedicationCard(m) {
     const badges = [
-      m.is_due ? `<span class="badge due">Da assumere</span>` : "",
-      m.is_low_stock ? `<span class="badge low-stock">Scorta in esaurimento</span>` : "",
+      m.is_due ? `<span class="badge due">${this.t("badge_due")}</span>` : "",
+      m.is_low_stock ? `<span class="badge low-stock">${this.t("badge_low_stock")}</span>` : "",
     ].join("");
 
     const scheduleText =
       m.dose_schedule.schedule_type === "fixed_times"
-        ? `Orari: ${m.dose_schedule.fixed_times.join(", ") || "-"}`
+        ? this.t("schedule_fixed_times_text", { times: m.dose_schedule.fixed_times.join(", ") || "-" })
         : m.dose_schedule.schedule_type === "weekly"
-        ? weeklyScheduleText(m.dose_schedule.weekly_times)
-        : `Ogni ${m.dose_schedule.interval_hours ?? "-"} ore dall'ultima assunzione`;
+        ? this._weeklyScheduleText(m.dose_schedule.weekly_times)
+        : this.t("schedule_interval_text", { hours: m.dose_schedule.interval_hours ?? "-" });
 
     const adminActions = this._isAdmin
-      ? `<button class="small" data-action="edit-medication" data-id="${m.id}">Modifica</button>
-         <button class="small danger" data-action="delete-medication" data-id="${m.id}">Elimina</button>`
+      ? `<button class="small" data-action="edit-medication" data-id="${m.id}">${this.t("edit")}</button>
+         <button class="small danger" data-action="delete-medication" data-id="${m.id}">${this.t("delete")}</button>`
       : "";
 
     return `
@@ -298,20 +307,20 @@ class NeoPillPanel extends HTMLElement {
           ${badges}
         </div>
         <div class="meta">
-          <span>Scorta: <b>${m.stock_quantity}</b> unità</span>
-          <span>Dose: <b>${m.dose_amount}</b></span>
+          <span>${this.t("stock_label")} <b>${m.stock_quantity}</b> ${this.t("unit_label")}</span>
+          <span>${this.t("dose_label")} <b>${m.dose_amount}</b></span>
           <span>${esc(scheduleText)}</span>
-          <span>Giorni rimanenti: <b>${m.days_remaining !== null ? Math.floor(m.days_remaining) : "-"}</b></span>
-          <span>Prossima: <b>${fmtDateTime(m.next_dose_at)}</b></span>
+          <span>${this.t("days_remaining_label")} <b>${m.days_remaining !== null ? Math.floor(m.days_remaining) : "-"}</b></span>
+          <span>${this.t("next_dose_label")} <b>${this._fmtDateTime(m.next_dose_at)}</b></span>
         </div>
         <div class="action-row">
-          <button data-action="take-dose" data-id="${m.id}">Assumi ora</button>
-          <button data-action="mark-missed" data-id="${m.id}">Segna come non assunta</button>
+          <button data-action="take-dose" data-id="${m.id}">${this.t("take_dose")}</button>
+          <button data-action="mark-missed" data-id="${m.id}">${this.t("mark_missed")}</button>
           <span class="restock-form">
-            <input type="number" step="0.25" min="0" placeholder="unità" data-role="restock-amount">
-            <span>oppure</span>
-            <input type="number" step="1" min="0" placeholder="confezioni" data-role="restock-packages">
-            <button data-action="do-restock" data-id="${m.id}">Rifornisci</button>
+            <input type="number" step="0.25" min="0" placeholder="${this.t("placeholder_units")}" data-role="restock-amount">
+            <span>${this.t("or")}</span>
+            <input type="number" step="1" min="0" placeholder="${this.t("placeholder_packages")}" data-role="restock-packages">
+            <button data-action="do-restock" data-id="${m.id}">${this.t("restock")}</button>
           </span>
           ${adminActions}
         </div>
@@ -326,14 +335,14 @@ class NeoPillPanel extends HTMLElement {
     const dialog = this.shadowRoot.getElementById("patientDialog");
     dialog.innerHTML = `
       <form method="dialog" class="dialog-body" data-form="patient">
-        <h2>${patient ? "Rinomina paziente" : "Nuovo paziente"}</h2>
+        <h2>${patient ? this.t("rename_patient_title") : this.t("new_patient_title")}</h2>
         <div class="field">
-          <label>Nome</label>
+          <label>${this.t("name_label")}</label>
           <input name="name" required value="${esc(this._patientDraft.name)}" autofocus>
         </div>
         <div class="dialog-actions">
-          <button type="button" data-action="close-patient-dialog">Annulla</button>
-          <button type="submit" class="primary">Salva</button>
+          <button type="button" data-action="close-patient-dialog">${this.t("cancel")}</button>
+          <button type="submit" class="primary">${this.t("save")}</button>
         </div>
       </form>
     `;
@@ -372,55 +381,56 @@ class NeoPillPanel extends HTMLElement {
         };
     const d = this._medDraft;
     const dialog = this.shadowRoot.getElementById("medDialog");
+    const removeTitle = this.t("remove");
     dialog.innerHTML = `
       <form method="dialog" class="dialog-body" data-form="medication">
-        <h2>${medication ? "Modifica farmaco" : "Nuovo farmaco"}</h2>
+        <h2>${medication ? this.t("edit_medication_title") : this.t("new_medication_title")}</h2>
         <div class="field">
-          <label>Nome</label>
+          <label>${this.t("name_label")}</label>
           <input name="name" required value="${esc(d.name)}" autofocus>
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Dose per assunzione</label>
+            <label>${this.t("dose_per_intake")}</label>
             <input name="dose_amount" type="number" step="0.25" min="0" value="${d.dose_amount}" required>
           </div>
           <div class="field">
-            <label>Scorta attuale</label>
+            <label>${this.t("current_stock")}</label>
             <input name="stock_quantity" type="number" step="0.25" min="0" value="${d.stock_quantity}" required>
           </div>
         </div>
         <div class="field-row">
           <div class="field">
-            <label>Unità per confezione (opzionale)</label>
+            <label>${this.t("package_size_label")}</label>
             <input name="package_size" type="number" step="1" min="0" value="${d.package_size}">
           </div>
           <div class="field">
-            <label>Soglia scorta in esaurimento (giorni)</label>
+            <label>${this.t("low_stock_threshold_label")}</label>
             <input name="low_stock_days_threshold" type="number" step="1" min="1" value="${d.low_stock_days_threshold}" required>
           </div>
         </div>
         <div class="field">
-          <label>Tipo di schema dose</label>
+          <label>${this.t("schedule_type_label")}</label>
           <select name="schedule_type" data-role="schedule-type">
-            <option value="fixed_times" ${d.schedule_type === "fixed_times" ? "selected" : ""}>Orari fissi al giorno</option>
-            <option value="weekly" ${d.schedule_type === "weekly" ? "selected" : ""}>Giorni della settimana</option>
-            <option value="interval" ${d.schedule_type === "interval" ? "selected" : ""}>Intervallo dall'ultima assunzione</option>
+            <option value="fixed_times" ${d.schedule_type === "fixed_times" ? "selected" : ""}>${this.t("schedule_type_fixed")}</option>
+            <option value="weekly" ${d.schedule_type === "weekly" ? "selected" : ""}>${this.t("schedule_type_weekly")}</option>
+            <option value="interval" ${d.schedule_type === "interval" ? "selected" : ""}>${this.t("schedule_type_interval")}</option>
           </select>
         </div>
         <div class="field" data-role="fixed-times-field" style="${d.schedule_type === "fixed_times" ? "" : "display:none"}">
-          <label>Orari</label>
+          <label>${this.t("times_label")}</label>
           <div data-role="fixed-times-list">
-            ${d.fixed_times.map((t) => timeRowHtml(t, "remove-time-row")).join("")}
+            ${d.fixed_times.map((t) => timeRowHtml(t, "remove-time-row", removeTitle)).join("")}
           </div>
-          <button type="button" class="small" data-action="add-time-row">+ Aggiungi orario</button>
+          <button type="button" class="small" data-action="add-time-row">${this.t("add_time")}</button>
         </div>
         <div class="field" data-role="interval-field" style="${d.schedule_type === "interval" ? "" : "display:none"}">
-          <label>Intervallo (ore)</label>
+          <label>${this.t("interval_hours_label")}</label>
           <input name="interval_hours" type="number" step="0.5" min="0.5" value="${d.interval_hours}">
         </div>
         <div class="field" data-role="weekly-field" style="${d.schedule_type === "weekly" ? "" : "display:none"}">
-          <label>Giorni e orari</label>
-          ${WEEK_DAYS.map(([key, label]) => {
+          <label>${this.t("days_and_times_label")}</label>
+          ${this._weekDays().map(([key, label]) => {
             const times = d.weekly_times[key] || [];
             const enabled = times.length > 0;
             return `
@@ -430,19 +440,19 @@ class NeoPillPanel extends HTMLElement {
                 ${label}
               </label>
               <div data-role="weekly-day-times" style="${enabled ? "" : "display:none"}">
-                ${times.map((t) => timeRowHtml(t, "remove-weekly-time-row")).join("")}
-                <button type="button" class="small" data-action="add-weekly-time-row">+ Aggiungi orario</button>
+                ${times.map((t) => timeRowHtml(t, "remove-weekly-time-row", removeTitle)).join("")}
+                <button type="button" class="small" data-action="add-weekly-time-row">${this.t("add_time")}</button>
               </div>
             </div>`;
           }).join("")}
         </div>
         <div class="field">
-          <label>Note</label>
+          <label>${this.t("notes_label")}</label>
           <textarea name="notes" rows="2">${esc(d.notes)}</textarea>
         </div>
         <div class="dialog-actions">
-          <button type="button" data-action="close-med-dialog">Annulla</button>
-          <button type="submit" class="primary">Salva</button>
+          <button type="button" data-action="close-med-dialog">${this.t("cancel")}</button>
+          <button type="submit" class="primary">${this.t("save")}</button>
         </div>
       </form>
     `;
@@ -468,7 +478,7 @@ class NeoPillPanel extends HTMLElement {
       timesDiv.style.display = e.target.checked ? "" : "none";
       if (e.target.checked && !timesDiv.querySelector('[data-role="weekly-time-value"]')) {
         const addBtn = timesDiv.querySelector('[data-action="add-weekly-time-row"]');
-        addBtn.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row"));
+        addBtn.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row", this.t("remove")));
       }
     }
   }
@@ -484,7 +494,7 @@ class NeoPillPanel extends HTMLElement {
     if (!patient) return;
 
     if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0 || min >= max) {
-      this._error = "\"Giorni minimi\" deve essere un numero minore di \"Giorni massimi\" (entrambi non negativi).";
+      this._error = this.t("threshold_validation_error");
       minInput.value = patient.restock_window_min_days;
       maxInput.value = patient.restock_window_max_days;
       this._renderMain();
@@ -530,7 +540,7 @@ class NeoPillPanel extends HTMLElement {
           this._openPatientDialog(this._patients.find((p) => p.id === id));
           break;
         case "delete-patient":
-          if (confirm("Eliminare questo paziente e tutti i suoi farmaci?")) {
+          if (confirm(this.t("confirm_delete_patient"))) {
             await api.deletePatient(this._hass, id);
             await this._reloadPatients();
           }
@@ -545,7 +555,7 @@ class NeoPillPanel extends HTMLElement {
           this._openMedicationDialog(this._medications.find((m) => m.id === id));
           break;
         case "delete-medication":
-          if (confirm("Eliminare questo farmaco?")) {
+          if (confirm(this.t("confirm_delete_medication"))) {
             await api.deleteMedication(this._hass, id);
             await this._reloadMedications();
           }
@@ -557,14 +567,14 @@ class NeoPillPanel extends HTMLElement {
           const list = this.shadowRoot
             .getElementById("medDialog")
             .querySelector('[data-role="fixed-times-list"]');
-          list.insertAdjacentHTML("beforeend", timeRowHtml("08:00", "remove-time-row"));
+          list.insertAdjacentHTML("beforeend", timeRowHtml("08:00", "remove-time-row", this.t("remove")));
           break;
         }
         case "remove-time-row":
           el.closest(".time-row").remove();
           break;
         case "add-weekly-time-row":
-          el.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row"));
+          el.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row", this.t("remove")));
           break;
         case "remove-weekly-time-row":
           el.closest(".time-row").remove();
@@ -582,7 +592,7 @@ class NeoPillPanel extends HTMLElement {
           const amount = card.querySelector('[data-role="restock-amount"]').value;
           const packages = card.querySelector('[data-role="restock-packages"]').value;
           if (!amount && !packages) {
-            alert("Indica una quantità in unità oppure un numero di confezioni.");
+            alert(this.t("restock_amount_required"));
             return;
           }
           await api.restock(this._hass, id, amount || undefined, packages || undefined);
