@@ -136,6 +136,14 @@ class NeoPillPanel extends HTMLElement {
       this._medications = [];
       this._history = [];
     }
+    // A native <select> always shows *some* option as chosen even when we never
+    // set one - keep our state in sync with that default (the first patient)
+    // instead of showing a "select a patient" placeholder next to an apparently
+    // already-selected dropdown.
+    if (!this._selectedPatientId && this._patients.length) {
+      await this._selectPatient(this._patients[0].id);
+      return;
+    }
     this._renderToolbar();
     this._renderMain();
   }
