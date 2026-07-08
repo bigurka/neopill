@@ -22,10 +22,12 @@ from .storage import MedicationNotFoundError, PatientNotFoundError
 
 DOMAIN_PREFIX = "neopill"
 
+_TIME_STR_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
+
 _DOSE_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required("schedule_type"): vol.In(["fixed_times", "interval"]),
-        vol.Optional("fixed_times", default=list): [str],
+        vol.Optional("fixed_times", default=list): [vol.Match(_TIME_STR_RE)],
         vol.Optional("interval_hours"): vol.Coerce(float),
     }
 )

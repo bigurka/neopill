@@ -304,7 +304,9 @@ class NeoPillPanel extends HTMLElement {
           package_size: medication.package_size ?? "",
           low_stock_days_threshold: medication.low_stock_days_threshold,
           schedule_type: medication.dose_schedule.schedule_type,
-          fixed_times: medication.dose_schedule.fixed_times.join(", "),
+          fixed_times: medication.dose_schedule.fixed_times.length
+            ? [...medication.dose_schedule.fixed_times]
+            : ["08:00"],
           interval_hours: medication.dose_schedule.interval_hours ?? "",
           notes: medication.notes || "",
         }
@@ -316,7 +318,7 @@ class NeoPillPanel extends HTMLElement {
           package_size: "",
           low_stock_days_threshold: 7,
           schedule_type: "fixed_times",
-          fixed_times: "08:00, 20:00",
+          fixed_times: ["08:00", "20:00"],
           interval_hours: "",
           notes: "",
         };
@@ -357,8 +359,19 @@ class NeoPillPanel extends HTMLElement {
           </select>
         </div>
         <div class="field" data-role="fixed-times-field" style="${d.schedule_type === "interval" ? "display:none" : ""}">
-          <label>Orari (HH:MM separati da virgola)</label>
-          <input name="fixed_times" value="${esc(d.fixed_times)}" placeholder="08:00, 14:00, 20:00">
+          <label>Orari</label>
+          <div data-role="fixed-times-list">
+            ${d.fixed_times
+              .map(
+                (t) => `
+              <div class="time-row">
+                <input type="time" data-role="fixed-time-value" value="${esc(t)}" required>
+                <button type="button" class="iconbtn" data-action="remove-time-row" title="Rimuovi">&#10005;</button>
+              </div>`
+              )
+              .join("")}
+          </div>
+          <button type="button" class="small" data-action="add-time-row">+ Aggiungi orario</button>
         </div>
         <div class="field" data-role="interval-field" style="${d.schedule_type === "fixed_times" ? "display:none" : ""}">
           <label>Intervallo (ore)</label>
@@ -433,6 +446,22 @@ class NeoPillPanel extends HTMLElement {
         case "close-med-dialog":
           this.shadowRoot.getElementById("medDialog").close();
           break;
+        case "add-time-row": {
+          const list = this.shadowRoot
+            .getElementById("medDialog")
+            .querySelector('[data-role="fixed-times-list"]');
+          list.insertAdjacentHTML(
+            "beforeend",
+            `<div class="time-row">
+              <input type="time" data-role="fixed-time-value" value="08:00" required>
+              <button type="button" class="iconbtn" data-action="remove-time-row" title="Rimuovi">&#10005;</button>
+            </div>`
+          );
+          break;
+        }
+        case "remove-time-row":
+          el.closest(".time-row").remove();
+          break;
         case "take-dose":
           await api.takeDose(this._hass, id);
           await this._reloadMedications();
@@ -491,10 +520,8 @@ class NeoPillPanel extends HTMLElement {
             schedule_type: scheduleType,
             fixed_times:
               scheduleType === "fixed_times"
-                ? data
-                    .get("fixed_times")
-                    .split(",")
-                    .map((t) => t.trim())
+                ? Array.from(form.querySelectorAll('[data-role="fixed-time-value"]'))
+                    .map((input) => input.value)
                     .filter(Boolean)
                 : [],
             interval_hours:

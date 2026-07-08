@@ -35,6 +35,19 @@ from .storage import NeoPillStore
 _LOGGER = logging.getLogger(__name__)
 
 
+def _parse_time_str(time_str: str) -> tuple[int, int] | None:
+    """Parse "HH:MM" defensively - malformed stored data must never crash setup."""
+    try:
+        hour_str, minute_str = time_str.split(":")[:2]
+        hour, minute = int(hour_str), int(minute_str)
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+    except (ValueError, IndexError):
+        _LOGGER.warning("Ignoring invalid dose time %r (expected HH:MM)", time_str)
+        return None
+    return hour, minute
+
+
 def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | None:
     """Pure function: first schedule occurrence strictly after `reference`."""
     if schedule.schedule_type == SCHEDULE_TYPE_FIXED_TIMES:
@@ -42,7 +55,10 @@ def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | 
             return None
         candidates: list[datetime] = []
         for time_str in schedule.fixed_times:
-            hour, minute = (int(part) for part in time_str.split(":")[:2])
+            parsed = _parse_time_str(time_str)
+            if parsed is None:
+                continue
+            hour, minute = parsed
             for day_offset in (0, 1):
                 day = reference + timedelta(days=day_offset)
                 candidate = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
