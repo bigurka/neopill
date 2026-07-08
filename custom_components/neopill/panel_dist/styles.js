@@ -19,32 +19,45 @@ export const styles = `
   }
   .header .pill-logo { width: 32px; height: 32px; flex: none; }
   .header h1 { font-size: 20px; margin: 0; flex: 1; }
-  .header button.icon { background: none; border: none; color: inherit; cursor: pointer; font-size: 18px; }
 
-  .layout { display: flex; height: calc(100% - 57px); }
-  .sidebar {
-    width: 260px;
-    flex: none;
-    border-right: 1px solid var(--divider-color, #2a2e3a);
-    overflow-y: auto;
-    padding: 8px;
+  .main { overflow-y: auto; padding: 16px 20px; height: calc(100% - 105px); }
+
+  .patient-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--divider-color, #2a2e3a);
   }
-  .main { flex: 1; overflow-y: auto; padding: 16px 20px; }
-
-  .patient-row {
+  .toolbar-sep { width: 1px; height: 24px; background: var(--divider-color, #3a3f4d); margin: 0 2px; }
+  .toolbar-spacer { flex: 1; }
+  .patient-toolbar select {
+    padding: 6px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--divider-color, #3a3f4d);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+  }
+  .threshold-field {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    margin-bottom: 4px;
+    font-size: 13px;
+    opacity: 0.85;
+    white-space: nowrap;
   }
-  .patient-row.selected { background: rgba(29, 233, 255, 0.12); }
-  .patient-row:hover { background: rgba(255, 255, 255, 0.06); }
-  .patient-row .name { flex: 1; }
-  .patient-row .actions { display: none; gap: 2px; }
-  .patient-row:hover .actions { display: flex; }
+  .threshold-field input[type="number"] {
+    width: 56px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--divider-color, #3a3f4d);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+  }
+  .patient-toolbar button.iconbtn { font-size: 16px; padding: 4px 8px; }
+  .patient-toolbar button.iconbtn.danger { color: #ff8a8a; }
 
   button {
     font: inherit;
@@ -72,9 +85,6 @@ export const styles = `
   }
   button.iconbtn:hover { opacity: 1; }
   button:disabled { opacity: 0.4; cursor: default; }
-
-  .add-patient-row { margin-top: 8px; }
-  .add-patient-row button { width: 100%; }
 
   .med-card {
     border: 1px solid var(--divider-color, #2a2e3a);

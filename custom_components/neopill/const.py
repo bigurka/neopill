@@ -12,6 +12,7 @@ PANEL_ICON = "mdi:pill-multiple"
 EVENT_DOSE_DUE = "neopill_dose_due"
 
 SIGNAL_PATIENT_ADDED = f"{DOMAIN}_patient_added"
+SIGNAL_PATIENT_UPDATED = f"{DOMAIN}_patient_updated"
 SIGNAL_PATIENT_REMOVED = f"{DOMAIN}_patient_removed"
 SIGNAL_MEDICATION_ADDED = f"{DOMAIN}_medication_added"
 SIGNAL_MEDICATION_UPDATED = f"{DOMAIN}_medication_updated"
@@ -23,8 +24,12 @@ SIGNAL_DOSE_DUE_CHANGED = f"{DOMAIN}_dose_due_changed"
 DEFAULT_LOW_STOCK_DAYS_THRESHOLD = 7
 DEFAULT_SAFETY_SWEEP_INTERVAL_MINUTES = 5
 
-RESTOCK_REMINDER_MIN_DAYS = 7
-RESTOCK_REMINDER_MAX_DAYS = 14
+# Default "ideal reorder window" (in days-of-stock-remaining) for a new patient -
+# a medication surfaces in the "farmaci da rifornire" sensor once its estimated
+# days remaining falls at or below the max and at or above the min. Editable per
+# patient afterwards (not a global constant once a patient exists).
+DEFAULT_RESTOCK_WINDOW_MIN_DAYS = 7
+DEFAULT_RESTOCK_WINDOW_MAX_DAYS = 14
 
 SCHEDULE_TYPE_FIXED_TIMES = "fixed_times"
 SCHEDULE_TYPE_INTERVAL = "interval"

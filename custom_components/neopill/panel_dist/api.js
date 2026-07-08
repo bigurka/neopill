@@ -9,8 +9,8 @@ export const api = {
   listPatients: (hass) => send(hass, { type: "neopill/patients/list" }).then((r) => r.patients),
   addPatient: (hass, name) =>
     send(hass, { type: "neopill/patients/add", name }).then((r) => r.patient),
-  updatePatient: (hass, patient_id, name) =>
-    send(hass, { type: "neopill/patients/update", patient_id, name }).then((r) => r.patient),
+  updatePatient: (hass, patient_id, data) =>
+    send(hass, { type: "neopill/patients/update", patient_id, ...data }).then((r) => r.patient),
   deletePatient: (hass, patient_id) => send(hass, { type: "neopill/patients/delete", patient_id }),
 
   listMedications: (hass, patient_id) =>

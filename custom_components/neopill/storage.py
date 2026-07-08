@@ -29,6 +29,7 @@ from .const import (
     SIGNAL_MEDICATION_UPDATED,
     SIGNAL_PATIENT_ADDED,
     SIGNAL_PATIENT_REMOVED,
+    SIGNAL_PATIENT_UPDATED,
     SIGNAL_RESTOCK_RECORDED,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -105,10 +106,20 @@ class NeoPillStore:
         async_dispatcher_send(self._hass, SIGNAL_PATIENT_ADDED, patient)
         return patient
 
-    async def async_update_patient(self, patient_id: str, name: str) -> Patient:
+    async def async_update_patient(self, patient_id: str, **fields: Any) -> Patient:
         patient = self.get_patient(patient_id)
-        patient.name = name
+        new_min = fields.get("restock_window_min_days", patient.restock_window_min_days)
+        new_max = fields.get("restock_window_max_days", patient.restock_window_max_days)
+        if new_min >= new_max:
+            raise ValueError(
+                "restock_window_min_days must be less than restock_window_max_days "
+                f"(got min={new_min}, max={new_max})"
+            )
+        for key, value in fields.items():
+            if value is not None and hasattr(patient, key):
+                setattr(patient, key, value)
         await self._async_save()
+        async_dispatcher_send(self._hass, SIGNAL_PATIENT_UPDATED, patient)
         return patient
 
     async def async_delete_patient(self, patient_id: str) -> None:

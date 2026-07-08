@@ -3,6 +3,7 @@ plus one per-patient restock-reminder summary sensor.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
@@ -11,16 +12,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+import homeassistant.util.dt as dt_util
 
 from .const import (
-    RESTOCK_REMINDER_MAX_DAYS,
-    RESTOCK_REMINDER_MIN_DAYS,
     SIGNAL_DOSE_DUE_CHANGED,
     SIGNAL_INTAKE_RECORDED,
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
     SIGNAL_MEDICATION_UPDATED,
     SIGNAL_PATIENT_ADDED,
+    SIGNAL_PATIENT_UPDATED,
     SIGNAL_RESTOCK_RECORDED,
 )
 from .entity import NeoPillMedicationEntity, patient_hub_device_info
@@ -152,13 +153,16 @@ class NextDoseSensor(NeoPillMedicationEntity, SensorEntity):
 
 
 class RestockReminderSensor(SensorEntity):
-    """Per-patient summary of that patient's medications running low soon.
+    """Per-patient summary of that patient's medications due for reordering soon.
 
     Lives on the patient's "<Nome> NeoPill" hub device (cleaned up automatically
     when that device is removed on patient deletion). State is the count of
-    medications whose estimated days-remaining falls within
-    [RESTOCK_REMINDER_MIN_DAYS, RESTOCK_REMINDER_MAX_DAYS]; the "testo" attribute
-    is a ready-to-send summary for a notify.* automation.
+    medications whose estimated days-remaining falls within that patient's own
+    "ideal reorder window" (Patient.restock_window_min_days/max_days, editable
+    from the panel) - meant to help batch as many medications as possible into
+    one pharmacy trip: not so early the prescription gets refused, not so late
+    there's no time left to go get them. The "testo" attribute is a ready-to-send
+    summary for a notify.* automation.
     """
 
     _attr_has_entity_name = True
@@ -185,10 +189,16 @@ class RestockReminderSensor(SensorEntity):
         return patient_hub_device_info(patient) if patient else None
 
     def _matching_medications(self) -> list[Medication]:
+        patient = self._store.patients.get(self._patient_id)
+        if patient is None:
+            return []
         matches = []
         for medication in self._store.list_medications(patient_id=self._patient_id):
             remaining = medication.days_remaining()
-            if remaining is not None and RESTOCK_REMINDER_MIN_DAYS <= remaining <= RESTOCK_REMINDER_MAX_DAYS:
+            if (
+                remaining is not None
+                and patient.restock_window_min_days <= remaining <= patient.restock_window_max_days
+            ):
                 matches.append(medication)
         return matches
 
@@ -198,29 +208,34 @@ class RestockReminderSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        patient = self._store.patients.get(self._patient_id)
         medications = self._matching_medications()
         items = []
         lines = []
         for medication in medications:
-            remaining = round(medication.days_remaining(), 1)
+            remaining_raw = medication.days_remaining()
+            remaining = round(remaining_raw, 1)
+            depletion_date = dt_util.now() + timedelta(days=remaining_raw)
             items.append(
                 {
                     "medication_id": medication.id,
                     "name": medication.name,
                     "days_remaining": remaining,
                     "stock_quantity": medication.stock_quantity,
+                    "data_esaurimento_prevista": depletion_date.isoformat(),
                 }
             )
             lines.append(
-                f"- {medication.name}: {remaining} giorni rimanenti, "
+                f"- {medication.name}: {remaining} giorni rimanenti "
+                f"(esaurimento previsto {depletion_date.strftime('%d/%m/%Y')}), "
                 f"scorta {medication.stock_quantity} unità"
             )
+        window_min = patient.restock_window_min_days if patient else "-"
+        window_max = patient.restock_window_max_days if patient else "-"
         testo = (
-            f"Farmaci da rifornire nei prossimi {RESTOCK_REMINDER_MIN_DAYS}-"
-            f"{RESTOCK_REMINDER_MAX_DAYS} giorni:\n" + "\n".join(lines)
+            f"Farmaci da rifornire (finestra {window_min}-{window_max} giorni):\n" + "\n".join(lines)
             if lines
-            else f"Nessun farmaco da rifornire nei prossimi {RESTOCK_REMINDER_MIN_DAYS}-"
-            f"{RESTOCK_REMINDER_MAX_DAYS} giorni."
+            else f"Nessun farmaco da rifornire nella finestra {window_min}-{window_max} giorni."
         )
         return {"farmaci": items, "testo": testo}
 
@@ -233,7 +248,15 @@ class RestockReminderSensor(SensorEntity):
             SIGNAL_MEDICATION_REMOVED,
         ):
             self.async_on_remove(async_dispatcher_connect(self.hass, signal, self._handle_refresh))
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_PATIENT_UPDATED, self._handle_patient_updated)
+        )
 
     @callback
     def _handle_refresh(self, *_args) -> None:
         self.async_write_ha_state()
+
+    @callback
+    def _handle_patient_updated(self, patient: Patient) -> None:
+        if patient.id == self._patient_id:
+            self.async_write_ha_state()

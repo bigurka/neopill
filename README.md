@@ -36,9 +36,13 @@ paziente e un dispositivo HA per ogni farmaco.
   sidebar di Home Assistant, separato da Lovelace.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
   per l'uso da automazioni.
-- Sensore riepilogativo per paziente `sensor.‹slug›_farmaci_da_rifornire`: conta e lista i farmaci di quel
-  paziente con scorta stimata tra 7 e 14 giorni, con un testo già formattato pronto per una
-  notifica/email (vedi sotto).
+- **Finestra ideale di riordino, per paziente**: due soglie (giorni minimi/massimi) editabili direttamente
+  dalla toolbar del pannello, pensate per raggruppare più farmaci possibile in un'unica commissione —
+  minimi = non aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di
+  rifiuto del medico per prescrizione anticipata). Il sensore per paziente
+  `sensor.‹slug›_farmaci_da_rifornire` elenca i farmaci il cui "giorni rimanenti" rientra in quella
+  finestra, con un testo già formattato pronto per una notifica/email (vedi sotto) e, per ciascun farmaco,
+  la data di esaurimento prevista.
 
 ## Installazione
 
@@ -57,9 +61,12 @@ installazione Home Assistant, poi riavvia.
 
 ## Utilizzo
 
-Dopo l'installazione, l'integrazione aggiunge una voce **NeoPill** nella sidebar: da lì si creano/gestiscono
-pazienti e farmaci. Le azioni quotidiane (assumi ora, segna come non assunta, rifornisci) sono disponibili
-sia dal pannello sia come entità/servizi standard di Home Assistant.
+Dopo l'installazione, l'integrazione aggiunge una voce **NeoPill** nella sidebar. In alto nel pannello c'è
+una toolbar con: icona per aggiungere un paziente, selettore del paziente attivo, i campi "Giorni minimi"/
+"Giorni massimi" della finestra di riordino di quel paziente (si salvano da soli quando esci dal campo),
+icona per aggiungere un farmaco e icona per eliminare il paziente selezionato. Sotto, le card dei farmaci
+del paziente con tutte le azioni quotidiane (assumi ora, segna come non assunta, rifornisci, modifica,
+elimina) — disponibili anche come entità/servizi standard di Home Assistant.
 
 ## Promemoria rifornimento via email
 

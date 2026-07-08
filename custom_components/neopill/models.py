@@ -12,6 +12,8 @@ from typing import Any
 
 from .const import (
     DEFAULT_LOW_STOCK_DAYS_THRESHOLD,
+    DEFAULT_RESTOCK_WINDOW_MAX_DAYS,
+    DEFAULT_RESTOCK_WINDOW_MIN_DAYS,
     INTAKE_STATUS_TAKEN,
     SCHEDULE_TYPE_FIXED_TIMES,
     SCHEDULE_TYPE_INTERVAL,
@@ -98,9 +100,21 @@ class Patient:
     name: str
     slug: str
     id: str = field(default_factory=new_id)
+    # "Ideal reorder window": a medication surfaces in the restock-reminder sensor
+    # once its estimated days remaining falls between these two bounds - min is
+    # the "don't leave it any later" cutoff, max is the "don't order too early"
+    # cutoff. min must stay < max (enforced in storage.async_update_patient).
+    restock_window_min_days: int = DEFAULT_RESTOCK_WINDOW_MIN_DAYS
+    restock_window_max_days: int = DEFAULT_RESTOCK_WINDOW_MAX_DAYS
 
     def as_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name, "slug": self.slug}
+        return {
+            "id": self.id,
+            "name": self.name,
+            "slug": self.slug,
+            "restock_window_min_days": self.restock_window_min_days,
+            "restock_window_max_days": self.restock_window_max_days,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Patient:
@@ -108,6 +122,12 @@ class Patient:
             id=data["id"],
             name=data["name"],
             slug=data.get("slug") or consonant_prefix(data["name"]),
+            restock_window_min_days=data.get(
+                "restock_window_min_days", DEFAULT_RESTOCK_WINDOW_MIN_DAYS
+            ),
+            restock_window_max_days=data.get(
+                "restock_window_max_days", DEFAULT_RESTOCK_WINDOW_MAX_DAYS
+            ),
         )
 
 

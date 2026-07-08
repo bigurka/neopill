@@ -97,12 +97,9 @@ class NeoPillPanel extends HTMLElement {
           </g>
         </svg>
         <h1>NeoPill</h1>
-        <button class="icon" data-action="refresh" title="Aggiorna">&#x21bb;</button>
       </div>
-      <div class="layout">
-        <div class="sidebar" id="sidebar"></div>
-        <div class="main" id="main"></div>
-      </div>
+      <div id="toolbar"></div>
+      <div class="main" id="main"></div>
       <dialog id="patientDialog"></dialog>
       <dialog id="medDialog"></dialog>
     `;
@@ -110,6 +107,7 @@ class NeoPillPanel extends HTMLElement {
     this.shadowRoot.addEventListener("click", (e) => this._handleClick(e));
     this.shadowRoot.addEventListener("submit", (e) => this._handleSubmit(e));
     this.shadowRoot.addEventListener("change", (e) => this._handleChange(e));
+    this.shadowRoot.addEventListener("focusout", (e) => this._handleBlur(e));
 
     await this._reloadPatients();
   }
@@ -118,7 +116,7 @@ class NeoPillPanel extends HTMLElement {
 
   async _reloadPatients() {
     this._loadingPatients = true;
-    this._renderSidebar();
+    this._renderToolbar();
     try {
       this._patients = await api.listPatients(this._hass);
       this._error = null;
@@ -131,13 +129,13 @@ class NeoPillPanel extends HTMLElement {
       this._medications = [];
       this._history = [];
     }
-    this._renderSidebar();
+    this._renderToolbar();
     this._renderMain();
   }
 
   async _selectPatient(patientId) {
-    this._selectedPatientId = patientId;
-    this._renderSidebar();
+    this._selectedPatientId = patientId || null;
+    this._renderToolbar();
     await this._reloadMedications();
   }
 
@@ -168,34 +166,58 @@ class NeoPillPanel extends HTMLElement {
     this._renderMain();
   }
 
-  // ---- Rendering: sidebar ----
+  // ---- Rendering: toolbar ----
 
-  _renderSidebar() {
-    const sidebar = this.shadowRoot.getElementById("sidebar");
-    if (!sidebar) return;
-    const rows = this._patients
-      .map((p) => {
-        const selected = p.id === this._selectedPatientId ? "selected" : "";
-        const adminActions = this._isAdmin
-          ? `<span class="actions">
-              <button class="iconbtn" data-action="edit-patient" data-id="${p.id}" title="Rinomina">&#9998;</button>
-              <button class="iconbtn" data-action="delete-patient" data-id="${p.id}" title="Elimina">&#128465;</button>
-            </span>`
-          : "";
-        return `<div class="patient-row ${selected}" data-action="select-patient" data-id="${p.id}">
-          <span class="name">${esc(p.name)}</span>
-          ${adminActions}
-        </div>`;
-      })
+  _renderToolbar() {
+    const toolbar = this.shadowRoot.getElementById("toolbar");
+    if (!toolbar) return;
+
+    if (this._loadingPatients) {
+      toolbar.innerHTML = `<div class="patient-toolbar"><span class="empty-state">Caricamento...</span></div>`;
+      return;
+    }
+
+    const patient = this._patients.find((p) => p.id === this._selectedPatientId) || null;
+    const options = this._patients
+      .map((p) => `<option value="${p.id}" ${p.id === this._selectedPatientId ? "selected" : ""}>${esc(p.name)}</option>`)
       .join("");
 
-    sidebar.innerHTML = `
-      ${this._loadingPatients ? `<div class="empty-state">Caricamento...</div>` : rows || `<div class="empty-state">Nessun paziente</div>`}
-      ${
-        this._isAdmin
-          ? `<div class="add-patient-row"><button data-action="new-patient">+ Paziente</button></div>`
-          : ""
-      }
+    toolbar.innerHTML = `
+      <div class="patient-toolbar">
+        ${
+          this._isAdmin
+            ? `<button class="iconbtn" data-action="new-patient" title="Aggiungi paziente">&#43;</button>`
+            : ""
+        }
+        <select data-role="patient-select" ${this._patients.length ? "" : "disabled"}>
+          ${this._patients.length ? options : `<option>Nessun paziente</option>`}
+        </select>
+        ${
+          patient
+            ? `
+          <span class="toolbar-sep"></span>
+          <label class="threshold-field">
+            Giorni minimi
+            <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}">
+          </label>
+          <label class="threshold-field">
+            Giorni massimi
+            <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}">
+          </label>
+          ${
+            this._isAdmin
+              ? `
+            <span class="toolbar-sep"></span>
+            <button class="iconbtn" data-action="new-medication" title="Aggiungi farmaco">&#43;</button>
+            <button class="iconbtn danger" data-action="delete-patient" data-id="${patient.id}" title="Elimina paziente">&#128465;</button>
+          `
+              : ""
+          }`
+            : ""
+        }
+        <span class="toolbar-spacer"></span>
+        <button class="iconbtn" data-action="refresh" title="Aggiorna">&#x21bb;</button>
+      </div>
     `;
   }
 
@@ -208,7 +230,7 @@ class NeoPillPanel extends HTMLElement {
     const errorBanner = this._error ? `<div class="error-banner">${esc(this._error)}</div>` : "";
 
     if (!this._selectedPatientId) {
-      main.innerHTML = `${errorBanner}<div class="empty-state">Seleziona un paziente dalla lista, oppure aggiungine uno.</div>`;
+      main.innerHTML = `${errorBanner}<div class="empty-state">Seleziona un paziente dal menu in alto, oppure aggiungine uno.</div>`;
       return;
     }
 
@@ -218,9 +240,6 @@ class NeoPillPanel extends HTMLElement {
     }
 
     const cards = this._medications.map((m) => this._renderMedicationCard(m)).join("");
-    const addButton = this._isAdmin
-      ? `<button class="primary" data-action="new-medication">+ Farmaco</button>`
-      : "";
 
     const historyRows = [...this._history]
       .reverse()
@@ -237,10 +256,6 @@ class NeoPillPanel extends HTMLElement {
 
     main.innerHTML = `
       ${errorBanner}
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <div></div>
-        ${addButton}
-      </div>
       ${cards || `<div class="empty-state">Nessun farmaco per questo paziente.</div>`}
       <section class="history">
         <h3>Storico (ultimi 30 giorni)</h3>
@@ -432,6 +447,9 @@ class NeoPillPanel extends HTMLElement {
   // ---- Event handling ----
 
   _handleChange(e) {
+    if (e.target.matches('[data-role="patient-select"]')) {
+      this._selectPatient(e.target.value);
+    }
     if (e.target.matches('[data-role="schedule-type"]')) {
       const dialog = this.shadowRoot.getElementById("medDialog");
       const type = e.target.value;
@@ -447,6 +465,41 @@ class NeoPillPanel extends HTMLElement {
         const addBtn = timesDiv.querySelector('[data-action="add-weekly-time-row"]');
         addBtn.insertAdjacentHTML("beforebegin", timeRowHtml("08:00", "remove-weekly-time-row"));
       }
+    }
+  }
+
+  async _handleBlur(e) {
+    if (!e.target.matches('[data-role="threshold-min"], [data-role="threshold-max"]')) return;
+    const toolbar = e.target.closest(".patient-toolbar");
+    const minInput = toolbar.querySelector('[data-role="threshold-min"]');
+    const maxInput = toolbar.querySelector('[data-role="threshold-max"]');
+    const min = Number(minInput.value);
+    const max = Number(maxInput.value);
+    const patient = this._patients.find((p) => p.id === this._selectedPatientId);
+    if (!patient) return;
+
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0 || min >= max) {
+      this._error = "\"Giorni minimi\" deve essere un numero minore di \"Giorni massimi\" (entrambi non negativi).";
+      minInput.value = patient.restock_window_min_days;
+      maxInput.value = patient.restock_window_max_days;
+      this._renderMain();
+      return;
+    }
+    if (min === patient.restock_window_min_days && max === patient.restock_window_max_days) return;
+
+    try {
+      await api.updatePatient(this._hass, patient.id, {
+        restock_window_min_days: min,
+        restock_window_max_days: max,
+      });
+      patient.restock_window_min_days = min;
+      patient.restock_window_max_days = max;
+      this._error = null;
+    } catch (err) {
+      this._error = err.message || String(err);
+      minInput.value = patient.restock_window_min_days;
+      maxInput.value = patient.restock_window_max_days;
+      this._renderMain();
     }
   }
 
@@ -550,7 +603,7 @@ class NeoPillPanel extends HTMLElement {
         const name = data.get("name").trim();
         if (!name) return;
         if (this._patientDraft.id) {
-          await api.updatePatient(this._hass, this._patientDraft.id, name);
+          await api.updatePatient(this._hass, this._patientDraft.id, { name });
         } else {
           await api.addPatient(this._hass, name);
         }

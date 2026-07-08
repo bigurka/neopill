@@ -100,7 +100,9 @@ async def ws_add_patient(
     {
         vol.Required("type"): f"{DOMAIN_PREFIX}/patients/update",
         vol.Required("patient_id"): str,
-        vol.Required("name"): str,
+        vol.Optional("name"): str,
+        vol.Optional("restock_window_min_days"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional("restock_window_max_days"): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
 @websocket_api.require_admin
@@ -109,9 +111,13 @@ async def ws_update_patient(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     runtime = get_runtime_data(hass)
+    fields = {k: v for k, v in msg.items() if k not in ("type", "id", "patient_id")}
     try:
-        patient = await runtime.store.async_update_patient(msg["patient_id"], msg["name"])
+        patient = await runtime.store.async_update_patient(msg["patient_id"], **fields)
     except PatientNotFoundError as err:
+        _error(connection, msg["id"], err)
+        return
+    except ValueError as err:
         _error(connection, msg["id"], err)
         return
     connection.send_result(msg["id"], {"patient": patient.as_dict()})
