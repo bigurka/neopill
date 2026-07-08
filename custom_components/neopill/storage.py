@@ -33,7 +33,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .models import DoseSchedule, IntakeEvent, Medication, Patient, RestockEvent
+from .models import DoseSchedule, IntakeEvent, Medication, Patient, RestockEvent, generate_patient_slug
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +97,9 @@ class NeoPillStore:
             raise PatientNotFoundError(patient_id) from err
 
     async def async_add_patient(self, name: str) -> Patient:
-        patient = Patient(name=name)
+        existing_slugs = {p.slug for p in self.patients.values()}
+        slug = generate_patient_slug(name, existing_slugs)
+        patient = Patient(name=name, slug=slug)
         self.patients[patient.id] = patient
         await self._async_save()
         async_dispatcher_send(self._hass, SIGNAL_PATIENT_ADDED, patient)

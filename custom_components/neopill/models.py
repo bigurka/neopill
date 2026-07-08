@@ -22,6 +22,37 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
+_VOWELS = set("aeiouàèéìòùáéíóúäëïöü")
+
+
+def consonant_prefix(name: str, length: int = 3) -> str:
+    """Compact deterministic tag from a name: first `length` consonants, lowercase.
+
+    Falls back to plain letters (then a fixed placeholder) for names with too few
+    consonants, so it always returns something usable as an entity_id fragment.
+    """
+    letters = [c.lower() for c in name if c.isalpha()]
+    consonants = [c for c in letters if c not in _VOWELS]
+    base = "".join(consonants[:length]) or "".join(letters[:length])
+    return base or "pz"
+
+
+def generate_patient_slug(name: str, existing_slugs: set[str]) -> str:
+    """Stable, human-readable patient tag used to prefix that patient's entity_ids.
+
+    Computed once when the patient is created and never recomputed on rename, so
+    renaming a patient later doesn't retroactively change existing entity_ids and
+    break automations/dashboards built on them.
+    """
+    base = consonant_prefix(name, 3)
+    if base not in existing_slugs:
+        return base
+    suffix = 2
+    while f"{base}{suffix}" in existing_slugs:
+        suffix += 1
+    return f"{base}{suffix}"
+
+
 @dataclass
 class DoseSchedule:
     schedule_type: str = SCHEDULE_TYPE_FIXED_TIMES
@@ -55,14 +86,19 @@ class DoseSchedule:
 @dataclass
 class Patient:
     name: str
+    slug: str
     id: str = field(default_factory=new_id)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name}
+        return {"id": self.id, "name": self.name, "slug": self.slug}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Patient:
-        return cls(id=data["id"], name=data["name"])
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            slug=data.get("slug") or consonant_prefix(data["name"]),
+        )
 
 
 @dataclass

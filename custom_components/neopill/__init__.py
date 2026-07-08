@@ -10,8 +10,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, SIGNAL_MEDICATION_REMOVED
+from .const import DOMAIN, SIGNAL_MEDICATION_REMOVED, SIGNAL_PATIENT_REMOVED
 from .coordinator import DoseScheduler
+from .entity import patient_hub_identifier
 from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services, async_unload_services
 from .storage import NeoPillStore
@@ -60,6 +61,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> b
 
     entry.async_on_unload(
         async_dispatcher_connect(hass, SIGNAL_MEDICATION_REMOVED, _remove_medication_device)
+    )
+
+    @callback
+    def _remove_patient_device(patient_id: str) -> None:
+        device = device_registry.async_get_device(identifiers={patient_hub_identifier(patient_id)})
+        if device is not None:
+            device_registry.async_remove_device(device.id)
+
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_PATIENT_REMOVED, _remove_patient_device)
     )
 
     async_setup_services(hass)

@@ -3,6 +3,10 @@
 CalendarEntity has no built-in storage - events are materialized on the fly from
 NeoPillStore's intake/restock history (past) plus each medication's next scheduled
 dose from the DoseScheduler (a single upcoming occurrence, not a projected series).
+
+Lives on the patient's "<Nome> NeoPill" hub device; cleanup on patient deletion
+happens for free via that device's removal cascade (see __init__.py), so this
+platform only needs to react to patients being *added*.
 """
 from __future__ import annotations
 
@@ -11,8 +15,8 @@ from datetime import datetime, timedelta
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-import homeassistant.util.dt as dt_util
 
 from .const import (
     CALENDAR_EVENT_DEPLETED,
@@ -23,9 +27,9 @@ from .const import (
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
     SIGNAL_PATIENT_ADDED,
-    SIGNAL_PATIENT_REMOVED,
     SIGNAL_RESTOCK_RECORDED,
 )
+from .entity import patient_hub_device_info
 from .models import Patient
 from .storage import NeoPillStore
 
@@ -42,31 +46,22 @@ _UPCOMING_DURATION = timedelta(minutes=15)
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback) -> None:
     store: NeoPillStore = entry.runtime_data.store
     scheduler = entry.runtime_data.scheduler
-    entities: dict[str, PatientCalendarEntity] = {}
 
     @callback
     def _add_for_patient(patient: Patient) -> None:
-        entity = PatientCalendarEntity(store, scheduler, patient.id)
-        entities[patient.id] = entity
-        async_add_entities([entity])
-
-    @callback
-    def _remove_for_patient(patient_id: str) -> None:
-        entity = entities.pop(patient_id, None)
-        if entity is not None:
-            hass.async_create_task(entity.async_remove(force_remove=True))
+        async_add_entities([PatientCalendarEntity(store, scheduler, patient.id)])
 
     for patient in store.list_patients():
         _add_for_patient(patient)
 
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_PATIENT_ADDED, _add_for_patient))
-    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_PATIENT_REMOVED, _remove_for_patient))
 
 
 class PatientCalendarEntity(CalendarEntity):
     """Calendar of intakes/missed doses/restocks for a single patient."""
 
     _attr_has_entity_name = True
+    _attr_name = "Calendario"
     _attr_should_poll = False
     _attr_icon = "mdi:calendar-heart"
 
@@ -75,15 +70,18 @@ class PatientCalendarEntity(CalendarEntity):
         self._scheduler = scheduler
         self._patient_id = patient_id
         self._attr_unique_id = f"{patient_id}_calendar"
-
-    @property
-    def name(self) -> str | None:
-        patient = self._store.patients.get(self._patient_id)
-        return patient.name if patient else None
+        patient = store.patients.get(patient_id)
+        if patient is not None:
+            self.entity_id = f"calendar.{patient.slug}_neopill"
 
     @property
     def available(self) -> bool:
         return self._patient_id in self._store.patients
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        patient = self._store.patients.get(self._patient_id)
+        return patient_hub_device_info(patient) if patient else None
 
     def _medication_ids(self) -> set[str]:
         return {m.id for m in self._store.list_medications(patient_id=self._patient_id)}

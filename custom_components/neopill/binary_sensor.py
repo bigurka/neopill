@@ -45,7 +45,7 @@ class DoseDueBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
     _attr_icon = "mdi:pill-multiple"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "da_assumere")
+        super().__init__(store, medication_id, "da_assumere", "binary_sensor")
         self._scheduler = scheduler
 
     @property
@@ -72,7 +72,7 @@ class LowStockBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
     _attr_icon = "mdi:package-variant-closed-remove"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "scorta_in_esaurimento")
+        super().__init__(store, medication_id, "scorta_in_esaurimento", "binary_sensor")
 
     @property
     def is_on(self) -> bool:

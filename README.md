@@ -12,18 +12,31 @@ paziente e un dispositivo HA per ogni farmaco.
 
 ## Funzionalità
 
-- Gestione multi-paziente, ciascuno con il proprio calendario HA nativo (assunzioni, rifornimenti, dosi
-  non assunte, scorta esaurita).
-- Ogni farmaco è un dispositivo HA con entità per scorta, prossima assunzione, giorni di scorta rimanenti,
-  stato "da assumere" e stato "scorta in esaurimento".
+- Gestione multi-paziente. Ogni paziente ha un device hub **"‹Nome› NeoPill"** che raccoglie le entità
+  trasversali (calendario, sensore farmaci-da-rifornire, pulsanti raggruppati per ora di assunzione) ed è
+  il "genitore" (via_device) dei device dei suoi farmaci.
+- Ogni farmaco è un dispositivo HA a sé, nominato `"‹Farmaco› (‹Paziente›)"`, con entità per scorta,
+  prossima assunzione, giorni di scorta rimanenti, stato "da assumere" e stato "scorta in esaurimento". Due
+  pazienti diversi con un farmaco dallo stesso nome restano completamente indipendenti (scorte, orari,
+  storico separati, device ed entity_id distinti).
+- **entity_id sempre prefissati con il paziente** (prime 3 consonanti del nome, es. `mrr` per "Mario
+  Rossi", con gestione automatica delle collisioni) — calcolati una sola volta alla creazione del paziente
+  e stabili nel tempo anche se lo rinomini dopo, per non rompere automazioni/dashboard.
+- Eliminando un paziente vengono rimossi automaticamente tutti i suoi farmaci, il calendario e le altre
+  entità collegate (cancellazione a cascata tramite il device hub del paziente).
 - Dosaggio a orari fissi o a intervallo dall'ultima assunzione, con dose anche frazionaria (es. 1/2, 1/4).
 - Rifornimento per quantità diretta o per numero di confezioni.
+- **Pulsanti raggruppati per ora di assunzione**: per ogni orario fisso in comune tra i farmaci di un
+  paziente vengono creati automaticamente due pulsanti — "Assumi tutti ore HH:MM" e "Segna tutti non
+  assunti ore HH:MM" — che agiscono in un colpo solo su tutti i farmaci di quel paziente previsti a
+  quell'orario. Creati/rimossi automaticamente quando aggiungi, modifichi o elimini un farmaco.
 - Tutta la gestione (pazienti, farmaci, assunzioni, rifornimenti) avviene da un pannello dedicato nella
   sidebar di Home Assistant, separato da Lovelace.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
   per l'uso da automazioni.
-- Sensore riepilogativo `sensor.neopill_farmaci_da_rifornire`: conta e lista i farmaci con scorta stimata
-  tra 7 e 14 giorni, con un testo già formattato pronto per una notifica/email (vedi sotto).
+- Sensore riepilogativo per paziente `sensor.‹slug›_farmaci_da_rifornire`: conta e lista i farmaci di quel
+  paziente con scorta stimata tra 7 e 14 giorni, con un testo già formattato pronto per una
+  notifica/email (vedi sotto).
 
 ## Installazione
 
@@ -49,9 +62,10 @@ sia dal pannello sia come entità/servizi standard di Home Assistant.
 ## Promemoria rifornimento via email
 
 NeoPill non gestisce l'invio di email direttamente (niente credenziali SMTP dentro l'integrazione): prepara
-solo i dati, tramite il sensore `sensor.neopill_farmaci_da_rifornire`. L'invio vero e proprio va fatto con
-un'automazione HA che usa un servizio `notify.*` email già configurato (es. l'integrazione nativa `smtp`,
-oppure Gmail/altri). Esempio:
+solo i dati, tramite un sensore per paziente `sensor.‹slug_paziente›_farmaci_da_rifornire` (es.
+`sensor.mrr_farmaci_da_rifornire` per "Mario Rossi"). L'invio vero e proprio va fatto con un'automazione HA
+che usa un servizio `notify.*` email già configurato (es. l'integrazione nativa `smtp`, oppure Gmail/altri).
+Esempio (sostituisci l'entity_id con quello del tuo paziente):
 
 ```yaml
 automation:
@@ -61,17 +75,18 @@ automation:
         at: "08:00:00"
     condition:
       - condition: numeric_state
-        entity_id: sensor.neopill_farmaci_da_rifornire
+        entity_id: sensor.mrr_farmaci_da_rifornire
         above: 0
     action:
       - service: notify.smtp   # sostituisci con il tuo servizio notify email
         data:
           title: "NeoPill: farmaci da rifornire"
-          message: "{{ state_attr('sensor.neopill_farmaci_da_rifornire', 'testo') }}"
+          message: "{{ state_attr('sensor.mrr_farmaci_da_rifornire', 'testo') }}"
 ```
 
-L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, paziente, giorni rimanenti,
-scorta) se preferisci costruire un messaggio personalizzato invece di usare il testo già pronto.
+L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, giorni rimanenti, scorta) se
+preferisci costruire un messaggio personalizzato invece di usare il testo già pronto. Se hai più pazienti,
+duplica l'automazione (o il trigger) per ciascun sensore.
 
 ## Permessi
 
@@ -99,10 +114,19 @@ dall'icona nella lista integrazioni.
 
 ## Stato del progetto
 
-v0.1.0: prima versione funzionale (backend + pannello). Non ancora testata su un'istanza Home Assistant
-reale/dev container: prima di un uso in produzione, verificare l'installazione secondo i passi in
-[Installazione](#installazione) e provare i flussi principali (creazione paziente/farmaco, assunzione,
-rifornimento, promemoria dose) su un ambiente di test.
+v0.2.0: backend + pannello, con device/entity_id organizzati per paziente (vedi Funzionalità). Non ancora
+del tutto testata su un'istanza Home Assistant reale: prima di un uso in produzione, verificare
+l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali
+(creazione paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un
+ambiente di test.
+
+**Nota per chi ha già dati di test da una versione precedente**: gli entity_id non vengono rinominati
+retroattivamente (per non rompere eventuali automazioni). Per vedere applicato il nuovo schema
+(prefisso paziente, device raggruppati) su farmaci/pazienti già creati, elimina e ricrea quei pazienti.
+
+**Prossimo passo pianificato**: entity_id in inglese con friendly name localizzati in base alla lingua di
+sistema — rimandato di proposito a dopo aver testato e validato quanto sopra, per non cambiare due volte lo
+schema degli identificatori nello stesso periodo.
 
 ## Licenza
 

@@ -1,5 +1,5 @@
 """Sensor platform for NeoPill: per-medication stock, next dose and days-remaining,
-plus one integration-wide restock-reminder summary sensor.
+plus one per-patient restock-reminder summary sensor.
 """
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, Sen
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -19,10 +20,11 @@ from .const import (
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
     SIGNAL_MEDICATION_UPDATED,
+    SIGNAL_PATIENT_ADDED,
     SIGNAL_RESTOCK_RECORDED,
 )
-from .entity import NeoPillMedicationEntity
-from .models import IntakeEvent, Medication, RestockEvent
+from .entity import NeoPillMedicationEntity, patient_hub_device_info
+from .models import IntakeEvent, Medication, Patient, RestockEvent
 from .storage import NeoPillStore
 
 
@@ -30,7 +32,14 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddE
     store: NeoPillStore = entry.runtime_data.store
     scheduler = entry.runtime_data.scheduler
 
-    async_add_entities([RestockReminderSensor(store)])
+    @callback
+    def _add_for_patient(patient: Patient) -> None:
+        async_add_entities([RestockReminderSensor(store, patient.id)])
+
+    for patient in store.list_patients():
+        _add_for_patient(patient)
+
+    entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_PATIENT_ADDED, _add_for_patient))
 
     @callback
     def _add_for_medication(medication: Medication) -> None:
@@ -59,7 +68,7 @@ class StockSensor(NeoPillMedicationEntity, SensorEntity):
     _attr_icon = "mdi:pill"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "scorta")
+        super().__init__(store, medication_id, "scorta", "sensor")
 
     @property
     def native_value(self) -> float | None:
@@ -90,7 +99,7 @@ class DaysRemainingSensor(NeoPillMedicationEntity, SensorEntity):
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, store: NeoPillStore, medication_id: str) -> None:
-        super().__init__(store, medication_id, "giorni_rimanenti")
+        super().__init__(store, medication_id, "giorni_rimanenti", "sensor")
 
     @property
     def native_value(self) -> float | None:
@@ -123,7 +132,7 @@ class NextDoseSensor(NeoPillMedicationEntity, SensorEntity):
     _attr_icon = "mdi:clock-alert-outline"
 
     def __init__(self, store: NeoPillStore, medication_id: str, scheduler) -> None:
-        super().__init__(store, medication_id, "prossima_assunzione")
+        super().__init__(store, medication_id, "prossima_assunzione", "sensor")
         self._scheduler = scheduler
 
     @property
@@ -143,26 +152,41 @@ class NextDoseSensor(NeoPillMedicationEntity, SensorEntity):
 
 
 class RestockReminderSensor(SensorEntity):
-    """Integration-wide summary of medications running low within a coming window.
+    """Per-patient summary of that patient's medications running low soon.
 
-    Not tied to any single medication device - state is the count of medications
-    whose estimated days-remaining falls within [RESTOCK_REMINDER_MIN_DAYS,
-    RESTOCK_REMINDER_MAX_DAYS]; the "testo" attribute is a ready-to-send summary,
-    meant to be dropped into a notify.* automation to email/notify a restock reminder.
+    Lives on the patient's "<Nome> NeoPill" hub device (cleaned up automatically
+    when that device is removed on patient deletion). State is the count of
+    medications whose estimated days-remaining falls within
+    [RESTOCK_REMINDER_MIN_DAYS, RESTOCK_REMINDER_MAX_DAYS]; the "testo" attribute
+    is a ready-to-send summary for a notify.* automation.
     """
 
+    _attr_has_entity_name = True
     _attr_name = "Farmaci da rifornire"
     _attr_icon = "mdi:pill-multiple"
     _attr_should_poll = False
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_unique_id = "neopill_farmaci_da_rifornire"
 
-    def __init__(self, store: NeoPillStore) -> None:
+    def __init__(self, store: NeoPillStore, patient_id: str) -> None:
         self._store = store
+        self._patient_id = patient_id
+        self._attr_unique_id = f"{patient_id}_farmaci_da_rifornire"
+        patient = store.patients.get(patient_id)
+        if patient is not None:
+            self.entity_id = f"sensor.{patient.slug}_farmaci_da_rifornire"
+
+    @property
+    def available(self) -> bool:
+        return self._patient_id in self._store.patients
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        patient = self._store.patients.get(self._patient_id)
+        return patient_hub_device_info(patient) if patient else None
 
     def _matching_medications(self) -> list[Medication]:
         matches = []
-        for medication in self._store.list_medications():
+        for medication in self._store.list_medications(patient_id=self._patient_id):
             remaining = medication.days_remaining()
             if remaining is not None and RESTOCK_REMINDER_MIN_DAYS <= remaining <= RESTOCK_REMINDER_MAX_DAYS:
                 matches.append(medication)
@@ -178,20 +202,17 @@ class RestockReminderSensor(SensorEntity):
         items = []
         lines = []
         for medication in medications:
-            patient = self._store.patients.get(medication.patient_id)
-            patient_name = patient.name if patient else ""
             remaining = round(medication.days_remaining(), 1)
             items.append(
                 {
                     "medication_id": medication.id,
                     "name": medication.name,
-                    "patient_name": patient_name,
                     "days_remaining": remaining,
                     "stock_quantity": medication.stock_quantity,
                 }
             )
             lines.append(
-                f"- {medication.name} ({patient_name}): {remaining} giorni rimanenti, "
+                f"- {medication.name}: {remaining} giorni rimanenti, "
                 f"scorta {medication.stock_quantity} unità"
             )
         testo = (
