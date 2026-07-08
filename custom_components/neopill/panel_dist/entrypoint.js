@@ -193,6 +193,11 @@ class NeoPillPanel extends HTMLElement {
           ${this._patients.length ? options : `<option>Nessun paziente</option>`}
         </select>
         ${
+          patient && this._isAdmin
+            ? `<button class="iconbtn" data-action="edit-patient" data-id="${patient.id}" title="Rinomina paziente">&#9998;</button>`
+            : ""
+        }
+        ${
           patient
             ? `
           <span class="toolbar-sep"></span>

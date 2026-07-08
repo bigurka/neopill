@@ -56,7 +56,7 @@ export const styles = `
     background: rgba(255, 255, 255, 0.04);
     color: inherit;
   }
-  .patient-toolbar button.iconbtn { font-size: 16px; padding: 4px 8px; }
+  .patient-toolbar button.iconbtn { font-size: 20px; line-height: 1; padding: 6px 10px; opacity: 0.9; }
   .patient-toolbar button.iconbtn.danger { color: #ff8a8a; }
 
   button {
