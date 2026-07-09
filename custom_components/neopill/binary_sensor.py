@@ -1,6 +1,8 @@
 """Binary sensor platform for NeoPill: dose-due reminder and low-stock warning."""
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -51,6 +53,22 @@ class DoseDueBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self._scheduler.is_due(self._medication_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose medication_id and friendly identifiers, for use in automations/blueprints
+        that need to call neopill.assumi_farmaco / neopill.segna_non_assunta without the
+        user having to look up the internal UUID by hand.
+        """
+        medication = self.medication
+        if medication is None:
+            return None
+        return {
+            "medication_id": medication.id,
+            "medication_name": medication.name,
+            "medication_full_name": medication.display_name(),
+            "dose_amount": medication.dose_amount,
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

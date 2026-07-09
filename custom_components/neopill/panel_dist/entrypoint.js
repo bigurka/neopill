@@ -81,6 +81,16 @@ class NeoPillPanel extends HTMLElement {
     }
   }
 
+  _fmtDate(iso) {
+    if (!iso) return "-";
+    try {
+      const locale = this._lang === "it" ? "it-IT" : "en-GB";
+      return new Date(iso).toLocaleDateString(locale, { dateStyle: "short" });
+    } catch (err) {
+      return iso;
+    }
+  }
+
   _weekDays() {
     return WEEK_DAY_KEYS.map((key) => [key, this.t(`day_${key}`)]);
   }
@@ -115,6 +125,7 @@ class NeoPillPanel extends HTMLElement {
     this.shadowRoot.addEventListener("submit", (e) => this._handleSubmit(e));
     this.shadowRoot.addEventListener("change", (e) => this._handleChange(e));
     this.shadowRoot.addEventListener("focusout", (e) => this._handleBlur(e));
+    this.shadowRoot.addEventListener("input", (e) => this._handleThresholdInput(e));
 
     await this._reloadPatients();
   }
@@ -201,7 +212,9 @@ class NeoPillPanel extends HTMLElement {
       <div class="patient-toolbar">
         ${
           this._isAdmin
-            ? `<button class="iconbtn" data-action="new-patient" title="${this.t("add_patient")}">&#43;</button>`
+            ? `<button class="iconbtn icon-badge" data-action="new-patient" title="${this.t("add_patient")}">
+                 <span class="icon-base">&#128100;</span><span class="icon-plus">+</span>
+               </button>`
             : ""
         }
         <select data-role="patient-select" ${this._patients.length ? "" : "disabled"}>
@@ -216,19 +229,23 @@ class NeoPillPanel extends HTMLElement {
           patient
             ? `
           <span class="toolbar-sep"></span>
-          <label class="threshold-field">
-            ${this.t("min_days")}
-            <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}">
-          </label>
-          <label class="threshold-field">
-            ${this.t("max_days")}
-            <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}">
-          </label>
+          <div class="threshold-stack">
+            <label class="threshold-field">
+              ${this.t("min_days")}
+              <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}">
+            </label>
+            <label class="threshold-field">
+              ${this.t("max_days")}
+              <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}">
+            </label>
+          </div>
           ${
             this._isAdmin
               ? `
             <span class="toolbar-sep"></span>
-            <button class="iconbtn" data-action="new-medication" title="${this.t("add_medication")}">&#43;</button>
+            <button class="iconbtn icon-badge" data-action="new-medication" title="${this.t("add_medication")}">
+              <span class="icon-base">&#128138;</span><span class="icon-plus">+</span>
+            </button>
             <button class="iconbtn danger" data-action="delete-patient" data-id="${patient.id}" title="${this.t("delete_patient")}">&#128465;</button>
           `
               : ""
@@ -317,9 +334,11 @@ class NeoPillPanel extends HTMLElement {
         <div class="meta">
           <span>${this.t("stock_label")} <b>${m.stock_quantity}</b> ${this.t("unit_label")}</span>
           <span>${this.t("dose_label")} <b>${m.dose_amount}</b></span>
+          ${m.package_size ? `<span>${this.t("package_content_label")} <b>${m.package_size}</b></span>` : ""}
           <span>${esc(scheduleText)}</span>
           <span>${this.t("days_remaining_label")} <b>${m.days_remaining !== null ? Math.floor(m.days_remaining) : "-"}</b></span>
           <span>${this.t("next_dose_label")} <b>${this._fmtDateTime(m.next_dose_at)}</b></span>
+          ${m.next_depletion_date ? `<span>${this.t("depletion_date_label")} <b>${this._fmtDate(m.next_depletion_date)}</b></span>` : ""}
         </div>
         <div class="action-row">
           <button data-action="take-dose" data-id="${m.id}">${this.t("take_dose")}</button>
@@ -362,6 +381,7 @@ class NeoPillPanel extends HTMLElement {
       ? {
           id: medication.id,
           name: medication.name,
+          full_name: medication.full_name || "",
           dose_amount: medication.dose_amount,
           stock_quantity: medication.stock_quantity,
           package_size: medication.package_size ?? "",
@@ -377,6 +397,7 @@ class NeoPillPanel extends HTMLElement {
       : {
           id: null,
           name: "",
+          full_name: "",
           dose_amount: 1,
           stock_quantity: 0,
           package_size: "",
@@ -396,6 +417,10 @@ class NeoPillPanel extends HTMLElement {
         <div class="field">
           <label>${this.t("name_label")}</label>
           <input name="name" required value="${esc(d.name)}" autofocus>
+        </div>
+        <div class="field">
+          <label>${this.t("full_name_label")}</label>
+          <input name="full_name" value="${esc(d.full_name)}" placeholder="${this.t("full_name_placeholder")}">
         </div>
         <div class="field-row">
           <div class="field">
@@ -491,6 +516,18 @@ class NeoPillPanel extends HTMLElement {
     }
   }
 
+  _handleThresholdInput(e) {
+    if (!e.target.matches('[data-role="threshold-min"], [data-role="threshold-max"]')) return;
+    const toolbar = e.target.closest(".patient-toolbar");
+    const minInput = toolbar.querySelector('[data-role="threshold-min"]');
+    const maxInput = toolbar.querySelector('[data-role="threshold-max"]');
+    const min = Number(minInput.value);
+    const max = Number(maxInput.value);
+    const valid = Number.isFinite(min) && Number.isFinite(max) && min >= 0 && max >= 0 && min < max;
+    minInput.classList.toggle("invalid", !valid);
+    maxInput.classList.toggle("invalid", !valid);
+  }
+
   async _handleBlur(e) {
     if (!e.target.matches('[data-role="threshold-min"], [data-role="threshold-max"]')) return;
     const toolbar = e.target.closest(".patient-toolbar");
@@ -505,6 +542,8 @@ class NeoPillPanel extends HTMLElement {
       this._error = this.t("threshold_validation_error");
       minInput.value = patient.restock_window_min_days;
       maxInput.value = patient.restock_window_max_days;
+      minInput.classList.remove("invalid");
+      maxInput.classList.remove("invalid");
       this._renderMain();
       return;
     }
@@ -522,6 +561,8 @@ class NeoPillPanel extends HTMLElement {
       this._error = err.message || String(err);
       minInput.value = patient.restock_window_min_days;
       maxInput.value = patient.restock_window_max_days;
+      minInput.classList.remove("invalid");
+      maxInput.classList.remove("invalid");
       this._renderMain();
     }
   }
@@ -637,6 +678,7 @@ class NeoPillPanel extends HTMLElement {
         const payload = {
           ...(this._medDraft.id ? {} : { patient_id: this._selectedPatientId }),
           name: data.get("name").trim(),
+          full_name: data.get("full_name").trim(),
           dose_amount: Number(data.get("dose_amount")),
           stock_quantity: Number(data.get("stock_quantity")),
           package_size: data.get("package_size") ? Number(data.get("package_size")) : undefined,

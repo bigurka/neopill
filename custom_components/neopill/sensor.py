@@ -3,7 +3,6 @@ plus one per-patient restock-reminder summary sensor.
 """
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
@@ -12,7 +11,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-import homeassistant.util.dt as dt_util
 
 from .const import (
     SIGNAL_DOSE_DUE_CHANGED,
@@ -213,20 +211,21 @@ class RestockReminderSensor(SensorEntity):
         items = []
         lines = []
         for medication in medications:
-            remaining_raw = medication.days_remaining()
-            remaining = round(remaining_raw, 1)
-            depletion_date = dt_util.now() + timedelta(days=remaining_raw)
+            remaining = round(medication.days_remaining(), 1)
+            depletion_date = medication.next_depletion_date()
+            display_name = medication.display_name()
             items.append(
                 {
                     "medication_id": medication.id,
                     "name": medication.name,
+                    "display_name": display_name,
                     "days_remaining": remaining,
                     "stock_quantity": medication.stock_quantity,
-                    "data_esaurimento_prevista": depletion_date.isoformat(),
+                    "data_esaurimento_prevista": depletion_date.isoformat() if depletion_date else None,
                 }
             )
             lines.append(
-                f"- {medication.name}: {remaining} giorni rimanenti "
+                f"- {display_name}: {remaining} giorni rimanenti "
                 f"(esaurimento previsto {depletion_date.strftime('%d/%m/%Y')}), "
                 f"scorta {medication.stock_quantity} unità"
             )

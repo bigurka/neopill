@@ -1,0 +1,105 @@
+blueprint:
+  name: NeoPill - Promemoria assunzione farmaco
+  description: >-
+    Quando una dose di un farmaco NeoPill risulta "da assumere", invia una
+    notifica push azionabile con i pulsanti "Assunto" / "Non assunto" al
+    dispositivo mobile scelto. Se non arriva nessuna risposta, la notifica
+    viene ripetuta a intervalli regolari finché non si risponde (o finché
+    il promemoria non si risolve da solo, ad es. perché la dose è scaduta).
+    Alla risposta, viene chiamato il servizio neopill.assumi_farmaco oppure
+    neopill.segna_non_assunta per il farmaco corrispondente.
+  domain: automation
+  author: bigurka
+  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml
+  input:
+    dose_due_entity:
+      name: Sensore "Da assumere"
+      description: >-
+        Il binary_sensor "dose_due" del farmaco NeoPill da monitorare (uno per
+        farmaco).
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: neopill
+    notify_device:
+      name: Dispositivo per la notifica
+      description: Il dispositivo mobile (app Home Assistant) a cui inviare il promemoria.
+      selector:
+        device:
+          integration: mobile_app
+    repeat_interval_minutes:
+      name: Intervallo di ripetizione (minuti)
+      description: Ogni quanti minuti ripetere la notifica se non si risponde.
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: minuti
+          mode: box
+    max_repeats:
+      name: Numero massimo di ripetizioni
+      description: >-
+        Dopo quante notifiche senza risposta l'automazione smette di
+        insistere (per sicurezza, evita ripetizioni infinite).
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: box
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input dose_due_entity
+    to: "on"
+
+variables:
+  dose_due_entity: !input dose_due_entity
+  notify_device: !input notify_device
+  medication_id: "{{ state_attr(dose_due_entity, 'medication_id') }}"
+  medication_name: "{{ state_attr(dose_due_entity, 'medication_full_name') or state_attr(dose_due_entity, 'medication_name') or 'farmaco' }}"
+  max_repeats: !input max_repeats
+
+action:
+  - repeat:
+      while:
+        - condition: template
+          value_template: "{{ is_state(dose_due_entity, 'on') and repeat.index <= max_repeats }}"
+      sequence:
+        - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
+          data:
+            title: "Promemoria farmaco"
+            message: "È ora di assumere {{ medication_name }}."
+            data:
+              tag: "neopill_dose_{{ medication_id }}"
+              actions:
+                - action: "NEOPILL_ASSUNTO_{{ context.id }}"
+                  title: "Assunto"
+                - action: "NEOPILL_NON_ASSUNTO_{{ context.id }}"
+                  title: "Non assunto"
+        - wait_for_trigger:
+            - platform: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: "NEOPILL_ASSUNTO_{{ context.id }}"
+            - platform: event
+              event_type: mobile_app_notification_action
+              event_data:
+                action: "NEOPILL_NON_ASSUNTO_{{ context.id }}"
+          timeout:
+            minutes: !input repeat_interval_minutes
+          continue_on_timeout: true
+        - choose:
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_ASSUNTO_') }}"
+              sequence:
+                - action: neopill.assumi_farmaco
+                  data:
+                    medication_id: "{{ medication_id }}"
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_NON_ASSUNTO_') }}"
+              sequence:
+                - action: neopill.segna_non_assunta
+                  data:
+                    medication_id: "{{ medication_id }}"

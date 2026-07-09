@@ -42,25 +42,53 @@ export const styles = `
     font-size: 24px;
     min-width: 220px;
   }
+  .threshold-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
   .threshold-field {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 18px;
+    font-size: 15px;
     opacity: 0.85;
     white-space: nowrap;
   }
   .threshold-field input[type="number"] {
-    width: 80px;
-    padding: 10px 12px;
+    width: 70px;
+    padding: 6px 10px;
     border-radius: 8px;
     border: 1px solid var(--divider-color, #3a3f4d);
     background: rgba(255, 255, 255, 0.04);
     color: inherit;
-    font-size: 18px;
+    font-size: 15px;
+  }
+  .threshold-field input.invalid {
+    border-color: #ff5b5b;
+    outline: 1px solid #ff5b5b;
   }
   .patient-toolbar button.iconbtn { font-size: 30px; line-height: 1; padding: 10px 16px; opacity: 0.9; }
   .patient-toolbar button.iconbtn.danger { color: #ff8a8a; }
+  .icon-badge { position: relative; }
+  .icon-badge .icon-base { display: block; font-size: 24px; line-height: 1; }
+  .icon-badge .icon-plus {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    width: 15px;
+    height: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 50%;
+    background: #1de9ff;
+    color: #001018;
+    border: 2px solid var(--primary-background-color, #111318);
+  }
 
   button {
     font: inherit;

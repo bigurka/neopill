@@ -1,0 +1,110 @@
+blueprint:
+  name: NeoPill - Promemoria rifornimento con conferma email
+  description: >-
+    Ogni giorno, all'orario scelto, controlla il sensore di rifornimento
+    NeoPill di un paziente. Se ci sono farmaci da riordinare, invia una
+    notifica push al dispositivo mobile scelto con il testo del promemoria,
+    da rivedere. Solo alla conferma esplicita (pulsante "Invia email"),
+    il testo viene inviato via email al servizio notify e agli indirizzi
+    indicati; con "Annulla" non viene inviato nulla.
+  domain: automation
+  author: bigurka
+  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_restock_email.yaml
+  input:
+    restock_sensor:
+      name: Sensore rifornimento
+      description: >-
+        Il sensore "restock_reminder" NeoPill del paziente (uno per
+        paziente, sul device hub del paziente).
+      selector:
+        entity:
+          domain: sensor
+          integration: neopill
+    notify_device:
+      name: Dispositivo per la notifica di revisione
+      description: Il dispositivo mobile (app Home Assistant) a cui inviare il testo da rivedere.
+      selector:
+        device:
+          integration: mobile_app
+    check_time:
+      name: Orario di controllo giornaliero
+      description: A che ora controllare ogni giorno se ci sono farmaci da riordinare.
+      default: "09:00:00"
+      selector:
+        time:
+    email_notify_service:
+      name: Servizio email
+      description: >-
+        Nome del servizio notify da usare per l'invio dell'email (es.
+        "notify.smtp" o "notify.gmail"), configurato separatamente in
+        Home Assistant.
+      selector:
+        text:
+    email_recipients:
+      name: Destinatari email
+      description: Uno o più indirizzi email, separati da virgola.
+      selector:
+        text:
+    confirm_timeout_minutes:
+      name: Timeout conferma (minuti)
+      description: >-
+        Dopo quanti minuti senza risposta l'invio email viene annullato
+        automaticamente.
+      default: 60
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: minuti
+          mode: box
+
+mode: single
+
+trigger:
+  - platform: time
+    at: !input check_time
+
+condition:
+  - condition: template
+    value_template: "{{ states(!input restock_sensor) not in ['0', 'unknown', 'unavailable'] }}"
+
+variables:
+  restock_sensor: !input restock_sensor
+  notify_device: !input notify_device
+  email_notify_service: !input email_notify_service
+  email_recipients: !input email_recipients
+  testo: "{{ state_attr(restock_sensor, 'testo') }}"
+
+action:
+  - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
+    data:
+      title: "Promemoria rifornimento farmaci"
+      message: "{{ testo }}"
+      data:
+        tag: "neopill_restock_{{ restock_sensor }}"
+        actions:
+          - action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
+            title: "Invia email"
+          - action: "NEOPILL_ANNULLA_{{ context.id }}"
+            title: "Annulla"
+  - wait_for_trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "NEOPILL_ANNULLA_{{ context.id }}"
+    timeout:
+      minutes: !input confirm_timeout_minutes
+    continue_on_timeout: true
+  - if:
+      - condition: template
+        value_template: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
+    then:
+      - action: "{{ email_notify_service }}"
+        data:
+          title: "Promemoria rifornimento farmaci"
+          message: "{{ testo }}"
+          target: "{{ email_recipients.split(',') | map('trim') | list }}"

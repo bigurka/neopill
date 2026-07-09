@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
+
+import homeassistant.util.dt as dt_util
 
 from .const import (
     DEFAULT_LOW_STOCK_DAYS_THRESHOLD,
@@ -141,7 +143,15 @@ class Medication:
     low_stock_days_threshold: int = DEFAULT_LOW_STOCK_DAYS_THRESHOLD
     dose_schedule: DoseSchedule = field(default_factory=DoseSchedule)
     notes: str = ""
+    # Full commercial/prescription name (e.g. "Olmesartan e Idroclorotiazide
+    # 40/12,5mg"), distinct from the short `name` used for the device/entities
+    # (e.g. "Olmesartan"). Optional - falls back to `name` where used.
+    full_name: str = ""
     id: str = field(default_factory=new_id)
+
+    def display_name(self) -> str:
+        """Full name if set, otherwise the short name - for outbound text/email."""
+        return self.full_name or self.name
 
     def daily_consumption(self) -> float:
         return self.dose_schedule.daily_doses_count() * self.dose_amount
@@ -151,6 +161,13 @@ class Medication:
         if consumption <= 0:
             return None
         return self.stock_quantity / consumption
+
+    def next_depletion_date(self) -> datetime | None:
+        """Predicted date/time the stock reaches zero, at the current consumption rate."""
+        remaining = self.days_remaining()
+        if remaining is None:
+            return None
+        return dt_util.now() + timedelta(days=remaining)
 
     def is_low_stock(self) -> bool:
         remaining = self.days_remaining()
@@ -169,6 +186,7 @@ class Medication:
             "low_stock_days_threshold": self.low_stock_days_threshold,
             "dose_schedule": self.dose_schedule.as_dict(),
             "notes": self.notes,
+            "full_name": self.full_name,
         }
 
     @classmethod
@@ -177,6 +195,7 @@ class Medication:
             id=data["id"],
             patient_id=data["patient_id"],
             name=data["name"],
+            full_name=data.get("full_name", ""),
             dose_amount=data.get("dose_amount", 1.0),
             stock_quantity=data.get("stock_quantity", 0.0),
             package_size=data.get("package_size"),

@@ -55,12 +55,14 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
 def _medication_payload(runtime, medication: Medication) -> dict[str, Any]:
     """Medication dict plus the computed fields the panel needs (no client-side duplication)."""
     due_at = runtime.scheduler.next_dose_at(medication.id)
+    depletion_at = medication.next_depletion_date()
     return {
         **medication.as_dict(),
         "is_due": runtime.scheduler.is_due(medication.id),
         "next_dose_at": due_at.isoformat() if due_at else None,
         "days_remaining": medication.days_remaining(),
         "is_low_stock": medication.is_low_stock(),
+        "next_depletion_date": depletion_at.isoformat() if depletion_at else None,
     }
 
 
@@ -165,6 +167,7 @@ async def ws_list_medications(
         vol.Required("type"): f"{DOMAIN_PREFIX}/medications/add",
         vol.Required("patient_id"): str,
         vol.Required("name"): str,
+        vol.Optional("full_name", default=""): str,
         vol.Optional("dose_amount", default=1.0): vol.Coerce(float),
         vol.Optional("stock_quantity", default=0.0): vol.Coerce(float),
         vol.Optional("package_size"): vol.Coerce(float),
@@ -184,6 +187,7 @@ async def ws_add_medication(
         medication = await runtime.store.async_add_medication(
             msg["patient_id"],
             msg["name"],
+            full_name=msg["full_name"],
             dose_amount=msg["dose_amount"],
             stock_quantity=msg["stock_quantity"],
             package_size=msg.get("package_size"),
@@ -202,6 +206,7 @@ async def ws_add_medication(
         vol.Required("type"): f"{DOMAIN_PREFIX}/medications/update",
         vol.Required("medication_id"): str,
         vol.Optional("name"): str,
+        vol.Optional("full_name"): str,
         vol.Optional("dose_amount"): vol.Coerce(float),
         vol.Optional("stock_quantity"): vol.Coerce(float),
         vol.Optional("package_size"): vol.Coerce(float),

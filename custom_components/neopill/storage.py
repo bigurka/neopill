@@ -149,6 +149,7 @@ class NeoPillStore:
         patient_id: str,
         name: str,
         *,
+        full_name: str = "",
         dose_amount: float = 1.0,
         stock_quantity: float = 0.0,
         package_size: float | None = None,
@@ -160,6 +161,7 @@ class NeoPillStore:
         medication = Medication(
             patient_id=patient_id,
             name=name,
+            full_name=full_name,
             dose_amount=dose_amount,
             stock_quantity=stock_quantity,
             package_size=package_size,
