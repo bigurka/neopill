@@ -307,6 +307,37 @@ class NeoPillPanel extends HTMLElement {
     `;
   }
 
+  // ---- Pill glyph (matches the NeoPill brand mark) used inside icon-action buttons ----
+
+  _pillGlyph() {
+    return `<svg viewBox="0 0 26 26" class="pill-icon" aria-hidden="true">
+      <g transform="rotate(-40 13 13)">
+        <rect x="3" y="9" width="20" height="8" rx="4" fill="#1de9ff"/>
+        <rect x="13" y="9" width="10" height="8" rx="4" fill="#ff5b5b"/>
+      </g>
+    </svg>`;
+  }
+
+  _doublePillGlyph() {
+    return `<svg viewBox="0 0 34 26" class="pill-icon pill-icon-double" aria-hidden="true">
+      <g transform="rotate(-40 10 13)" opacity="0.85">
+        <rect x="-3" y="8" width="20" height="8" rx="4" fill="#1de9ff"/>
+        <rect x="11" y="8" width="10" height="8" rx="4" fill="#ff5b5b"/>
+      </g>
+      <g transform="rotate(-40 22 15)">
+        <rect x="11" y="10" width="20" height="8" rx="4" fill="#1de9ff"/>
+        <rect x="25" y="10" width="10" height="8" rx="4" fill="#ff5b5b"/>
+      </g>
+    </svg>`;
+  }
+
+  _pillActionButton(action, id, badgeClass, badgeGlyph, label, double) {
+    return `<button class="pillbtn" data-action="${action}" data-id="${id}" title="${label}" aria-label="${label}">
+      ${double ? this._doublePillGlyph() : this._pillGlyph()}
+      <span class="pillbtn-badge ${badgeClass}">${badgeGlyph}</span>
+    </button>`;
+  }
+
   _renderMedicationCard(m) {
     const badges = [
       m.is_due ? `<span class="badge due">${this.t("badge_due")}</span>` : "",
@@ -321,8 +352,10 @@ class NeoPillPanel extends HTMLElement {
         : this.t("schedule_interval_text", { hours: m.dose_schedule.interval_hours ?? "-" });
 
     const adminActions = this._isAdmin
-      ? `<button class="small" data-action="edit-medication" data-id="${m.id}">${this.t("edit")}</button>
-         <button class="small danger" data-action="delete-medication" data-id="${m.id}">${this.t("delete")}</button>`
+      ? `${this._pillActionButton("edit-medication", m.id, "accent", "&#9998;", this.t("edit"))}
+         <button class="iconbtn danger" data-action="delete-medication" data-id="${m.id}" title="${this.t(
+          "delete"
+        )}" aria-label="${this.t("delete")}">&#128465;&#65039;</button>`
       : "";
 
     return `
@@ -341,13 +374,13 @@ class NeoPillPanel extends HTMLElement {
           ${m.next_depletion_date ? `<span>${this.t("depletion_date_label")} <b>${this._fmtDate(m.next_depletion_date)}</b></span>` : ""}
         </div>
         <div class="action-row">
-          <button data-action="take-dose" data-id="${m.id}">${this.t("take_dose")}</button>
-          <button data-action="mark-missed" data-id="${m.id}">${this.t("mark_missed")}</button>
+          ${this._pillActionButton("take-dose", m.id, "success", "&#10003;", this.t("take_dose"))}
+          ${this._pillActionButton("mark-missed", m.id, "danger", "&#10005;", this.t("mark_missed"))}
           <span class="restock-form">
             <input type="number" step="0.25" min="0" placeholder="${this.t("placeholder_units")}" data-role="restock-amount">
             <span>${this.t("or")}</span>
             <input type="number" step="1" min="0" placeholder="${this.t("placeholder_packages")}" data-role="restock-packages">
-            <button data-action="do-restock" data-id="${m.id}">${this.t("restock")}</button>
+            ${this._pillActionButton("do-restock", m.id, "accent", "&#8592;", this.t("restock"), true)}
           </span>
           ${adminActions}
         </div>

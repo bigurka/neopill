@@ -147,6 +147,38 @@ export const styles = `
 
   .med-card .action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: auto; padding-top: 10px; }
   .med-card .restock-form { display: flex; gap: 6px; align-items: center; }
+
+  button.pillbtn {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pill-icon { width: 28px; height: 28px; display: block; }
+  .pill-icon-double { width: 34px; height: 26px; }
+  .pillbtn-badge {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 50%;
+    border: 2px solid var(--primary-background-color, #111318);
+  }
+  .pillbtn-badge.success { background: #2fd77c; color: #002913; }
+  .pillbtn-badge.danger { background: #ff5b5b; color: #330000; }
+  .pillbtn-badge.accent { background: #1de9ff; color: #001018; }
+  button.iconbtn.danger { font-size: 18px; padding: 4px 8px; }
   .med-card input[type="number"] {
     width: 70px;
     padding: 5px 7px;
