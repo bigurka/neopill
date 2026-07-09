@@ -2,12 +2,16 @@ blueprint:
   name: NeoPill - Promemoria rifornimento con conferma email
   description: >-
     Ogni giorno, all'orario scelto, controlla il sensore di rifornimento
-    NeoPill di un paziente. Se ci sono farmaci da riordinare, invia una
-    notifica push al dispositivo mobile scelto con il testo del promemoria,
-    da rivedere. Solo alla conferma esplicita (pulsante "Invia email"),
-    viene eseguita l'azione di invio email che hai configurato tu stesso
-    (qualsiasi servizio disponibile in Home Assistant, coi suoi campi
-    specifici); con "Annulla" non viene inviato nulla.
+    NeoPill di un paziente. Se ci sono farmaci da riordinare, invia sempre
+    una notifica push al dispositivo mobile scelto con il testo del
+    promemoria. Con "Richiedi conferma prima dell'invio" attivo
+    (consigliato all'inizio, per verificare che tutto sia impostato
+    correttamente), la notifica include i pulsanti "Invia email"/"Annulla"
+    e l'email - l'azione che hai configurato tu stesso, qualsiasi servizio
+    disponibile in Home Assistant coi suoi campi specifici - parte solo
+    alla conferma esplicita. Con "Richiedi conferma" disattivato, la
+    notifica resta solo informativa e l'email parte subito, in automatico
+    (comodo quando ormai serve solo per passare in farmacia).
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_restock_email.yaml
@@ -22,11 +26,23 @@ blueprint:
           domain: sensor
           integration: neopill
     notify_device:
-      name: Dispositivo per la notifica di revisione
-      description: Il dispositivo mobile (app Home Assistant) a cui inviare il testo da rivedere.
+      name: Dispositivo per la notifica
+      description: Il dispositivo mobile (app Home Assistant) a cui inviare il promemoria.
       selector:
         device:
           integration: mobile_app
+    require_confirmation:
+      name: Richiedi conferma prima dell'invio
+      description: >-
+        Se attivo, la notifica push include i pulsanti "Invia email"/
+        "Annulla" e l'email parte solo alla conferma esplicita - utile
+        all'inizio per verificare che tutto sia impostato correttamente.
+        Se disattivato, la notifica resta solo informativa (senza
+        pulsanti) e l'email parte subito, in automatico, senza aspettare
+        nulla.
+      default: true
+      selector:
+        boolean:
     check_time:
       name: Orario di controllo giornaliero
       description: A che ora controllare ogni giorno se ci sono farmaci da riordinare.
@@ -53,22 +69,21 @@ blueprint:
     email_action:
       name: Azione di invio email
       description: >-
-        L'azione da eseguire per inviare l'email quando confermi (es.
-        ms365_mail.mail_send, notify.smtp, notify.gmail o qualsiasi altro
-        servizio email disponibile in Home Assistant). Scegli il servizio
-        e compila i suoi campi come faresti in una normale automazione
-        (destinatari, oggetto, ecc.). Nel campo dove va il testo del
-        messaggio, passa in modalità YAML e usa i modelli "{{ testo }}",
-        "{{ recipient_name }}" e "{{ sender_name }}" per includere
-        rispettivamente l'elenco dei farmaci, il nome del destinatario e
-        il nome del mittente.
+        L'azione da eseguire per inviare l'email (es. ms365_mail.mail_send,
+        notify.smtp, notify.gmail o qualsiasi altro servizio email
+        disponibile in Home Assistant). Scegli il servizio e compila i
+        suoi campi come faresti in una normale automazione (destinatari,
+        oggetto, ecc.). Nel campo dove va il testo del messaggio, passa in
+        modalità YAML e usa i modelli "{{ testo }}", "{{ recipient_name }}"
+        e "{{ sender_name }}" per includere rispettivamente l'elenco dei
+        farmaci, il nome del destinatario e il nome del mittente.
       selector:
         action: {}
     confirm_timeout_minutes:
       name: Timeout conferma (minuti)
       description: >-
         Dopo quanti minuti senza risposta l'invio email viene annullato
-        automaticamente.
+        automaticamente. Usato solo se "Richiedi conferma" è attivo.
       default: 60
       selector:
         number:
@@ -90,6 +105,7 @@ condition:
 variables:
   restock_sensor: !input restock_sensor
   notify_device: !input notify_device
+  require_confirmation: !input require_confirmation
   recipient_name: !input recipient_name
   sender_name: !input sender_name
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
@@ -98,27 +114,33 @@ action:
   - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
     data:
       title: "Promemoria rifornimento farmaci"
-      message: "{{ testo }}"
+      message: >-
+        {{ testo }}{{ '\n\nEmail inviata automaticamente.' if not require_confirmation else '' }}
       data:
         tag: "neopill_restock_{{ restock_sensor }}"
-        actions:
-          - action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
-            title: "Invia email"
-          - action: "NEOPILL_ANNULLA_{{ context.id }}"
-            title: "Annulla"
-  - wait_for_trigger:
-      - platform: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
-      - platform: event
-        event_type: mobile_app_notification_action
-        event_data:
-          action: "NEOPILL_ANNULLA_{{ context.id }}"
-    timeout:
-      minutes: !input confirm_timeout_minutes
-    continue_on_timeout: true
+        actions: >-
+          {{ [
+               {'action': 'NEOPILL_INVIA_EMAIL_' ~ context.id, 'title': 'Invia email'},
+               {'action': 'NEOPILL_ANNULLA_' ~ context.id, 'title': 'Annulla'},
+             ] if require_confirmation else [] }}
   - if:
       - condition: template
-        value_template: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
-    then: !input email_action
+        value_template: "{{ require_confirmation }}"
+    then:
+      - wait_for_trigger:
+          - platform: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
+          - platform: event
+            event_type: mobile_app_notification_action
+            event_data:
+              action: "NEOPILL_ANNULLA_{{ context.id }}"
+        timeout:
+          minutes: !input confirm_timeout_minutes
+        continue_on_timeout: true
+      - if:
+          - condition: template
+            value_template: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
+        then: !input email_action
+    else: !input email_action
