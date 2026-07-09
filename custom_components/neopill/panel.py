@@ -17,11 +17,14 @@ from .const import PANEL_ICON, PANEL_TITLE, PANEL_URL_PATH
 
 _INTEGRATION_DIR = pathlib.Path(__file__).parent
 _PANEL_DIST_DIR = _INTEGRATION_DIR / "panel_dist"
-_STATIC_URL_PATH = "/api/neopill/panel"
 _WEBCOMPONENT_NAME = "neopill-panel"
 
 _MANIFEST = json.loads((_INTEGRATION_DIR / "manifest.json").read_text(encoding="utf-8"))
 _VERSION = _MANIFEST.get("version", "0")
+# Version-scoped so that entrypoint.js's relative imports (./styles.js, ./i18n.js) also
+# get a fresh URL on every release — without this, cache_headers=True below means browsers
+# keep serving stale styles.js/i18n.js indefinitely even after entrypoint.js itself updates.
+_STATIC_URL_PATH = f"/api/neopill/panel/{_VERSION}"
 
 
 async def async_register_panel(hass: HomeAssistant) -> None:
@@ -39,7 +42,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
                 "name": _WEBCOMPONENT_NAME,
                 "embed_iframe": False,
                 "trust_external": False,
-                "module_url": f"{_STATIC_URL_PATH}/entrypoint.js?v={_VERSION}",
+                "module_url": f"{_STATIC_URL_PATH}/entrypoint.js",
             }
         },
         require_admin=False,
