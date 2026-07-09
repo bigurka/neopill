@@ -33,6 +33,23 @@ blueprint:
       default: "09:00:00"
       selector:
         time:
+    recipient_name:
+      name: Nome destinatario
+      description: >-
+        Il nome della persona a cui è indirizzata l'email (es. "Elisabetta"),
+        da usare nel saluto del messaggio. Richiamalo nel tuo template con
+        "{{ recipient_name }}".
+      default: ""
+      selector:
+        text:
+    sender_name:
+      name: Nome mittente
+      description: >-
+        Il nome di chi firma l'email (es. "Marco Rossato"). Richiamalo nel
+        tuo template con "{{ sender_name }}".
+      default: ""
+      selector:
+        text:
     email_action:
       name: Azione di invio email
       description: >-
@@ -41,9 +58,10 @@ blueprint:
         servizio email disponibile in Home Assistant). Scegli il servizio
         e compila i suoi campi come faresti in una normale automazione
         (destinatari, oggetto, ecc.). Nel campo dove va il testo del
-        messaggio, passa in modalità YAML e usa il modello
-        "{{ testo }}" per includere l'elenco dei farmaci da rifornire
-        generato automaticamente.
+        messaggio, passa in modalità YAML e usa i modelli "{{ testo }}",
+        "{{ recipient_name }}" e "{{ sender_name }}" per includere
+        rispettivamente l'elenco dei farmaci, il nome del destinatario e
+        il nome del mittente.
       selector:
         action: {}
     confirm_timeout_minutes:
@@ -72,6 +90,8 @@ condition:
 variables:
   restock_sensor: !input restock_sensor
   notify_device: !input notify_device
+  recipient_name: !input recipient_name
+  sender_name: !input sender_name
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
 
 action:
