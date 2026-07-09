@@ -158,15 +158,17 @@ class RestockReminderSensor(SensorEntity):
     when that device is removed on patient deletion). A medication becomes a
     *candidate* once its estimated days-remaining falls within that patient's own
     "ideal reorder window" (Patient.restock_window_min_days/max_days, editable
-    from the panel). Rather than surfacing every candidate every single day (which
-    would mean repeat notifications for the whole width of the window), the sensor
-    only "fires" - i.e. its state becomes non-zero - once per batch: it waits for
-    as long as it safely can (to let more medications enter the window and join
-    the same order) and only reports once the most urgent candidate is about to
-    drop below the minimum, at which point ALL current candidates are included.
-    This decision is only recomputed at midnight and on HA restart (not on every
-    live change), so the state stays stable for automations that check it once a
-    day. The "testo" attribute is a ready-to-send summary for a notify.* automation.
+    from the panel). The sensor's state is the count of medications being reported
+    *today*: each candidate is reported once, either the moment it first enters the
+    window (so you learn about it while there's still time to wait for others to
+    join the same order) or - always - the moment it becomes the most urgent one
+    (so nothing is ever silently missed), whichever comes first. A candidate that
+    was already reported and isn't yet urgent again is not repeated in later
+    batches, so a slow-to-restock medication doesn't reappear in every email while
+    it waits alongside newer, more urgent ones. This decision is only recomputed
+    at midnight and on HA restart (not on every live change), so the state stays
+    stable for automations that check it once a day. The "testo" attribute is a
+    ready-to-send summary for a notify.* automation.
     """
 
     _attr_has_entity_name = True
@@ -210,23 +212,38 @@ class RestockReminderSensor(SensorEntity):
 
     @callback
     def _async_recompute_decision(self) -> None:
-        """Decide whether *today* is the day to batch and report the current candidates.
+        """Decide whether *today* is the day to report, and which medications to include.
 
-        Waits as long as possible (to catch more medications entering the window)
-        and only fires once the most urgent candidate would otherwise drop below
-        the minimum threshold tomorrow - at which point everyone currently in the
-        window is reported together, for the largest safe batch.
+        A medication is reported once: either the first time it enters the window (so
+        you know about it while it's still safe to wait), or - always - once it becomes
+        the urgent one forcing a report (so nothing is ever silently missed). Medications
+        already reported earlier and still just waiting (not yet urgent again) are not
+        repeated in every subsequent batch.
         """
         patient = self._store.patients.get(self._patient_id)
         candidates = self._candidate_medications()
         if not candidates or patient is None:
             self._decided_ids = set()
+            if patient is not None and patient.restock_reported_ids:
+                self.hass.async_create_task(
+                    self._store.async_set_restock_reported_ids(patient.id, [])
+                )
             return
-        most_urgent_remaining = min(candidates.values())
-        if most_urgent_remaining <= patient.restock_window_min_days:
-            self._decided_ids = set(candidates)
-        else:
-            self._decided_ids = set()
+
+        previously_reported = set(patient.restock_reported_ids) & set(candidates)
+        new_ids = set(candidates) - previously_reported
+        forced_ids = {
+            medication_id
+            for medication_id, remaining in candidates.items()
+            if remaining <= patient.restock_window_min_days
+        }
+        self._decided_ids = new_ids | forced_ids
+
+        updated_reported = previously_reported | self._decided_ids
+        if updated_reported != set(patient.restock_reported_ids):
+            self.hass.async_create_task(
+                self._store.async_set_restock_reported_ids(patient.id, sorted(updated_reported))
+            )
 
     def _decided_medications(self) -> list[Medication]:
         return [

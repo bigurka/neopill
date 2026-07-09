@@ -108,6 +108,11 @@ class Patient:
     # cutoff. min must stay < max (enforced in storage.async_update_patient).
     restock_window_min_days: int = DEFAULT_RESTOCK_WINDOW_MIN_DAYS
     restock_window_max_days: int = DEFAULT_RESTOCK_WINDOW_MAX_DAYS
+    # Medication ids already included in a restock-batch email while still inside the
+    # reorder window (not yet restocked or expired out of it) - lets RestockReminderSensor
+    # avoid repeating an already-reported, not-yet-urgent medication in every subsequent
+    # batch email. Pruned automatically as medications leave the window.
+    restock_reported_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +121,7 @@ class Patient:
             "slug": self.slug,
             "restock_window_min_days": self.restock_window_min_days,
             "restock_window_max_days": self.restock_window_max_days,
+            "restock_reported_ids": self.restock_reported_ids,
         }
 
     @classmethod
@@ -130,6 +136,7 @@ class Patient:
             restock_window_max_days=data.get(
                 "restock_window_max_days", DEFAULT_RESTOCK_WINDOW_MAX_DAYS
             ),
+            restock_reported_ids=list(data.get("restock_reported_ids", [])),
         )
 
 

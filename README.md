@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.7.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.11.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -31,7 +31,9 @@ paziente e un dispositivo HA per ogni farmaco.
 - Ogni farmaco è un dispositivo HA a sé, nominato `"‹Farmaco› (‹Paziente›)"`, con entità per scorta,
   prossima assunzione, giorni di scorta rimanenti, stato "da assumere" e stato "scorta in esaurimento". Due
   pazienti diversi con un farmaco dallo stesso nome restano completamente indipendenti (scorte, orari,
-  storico separati, device ed entity_id distinti).
+  storico separati, device ed entity_id distinti). È possibile indicare anche un **nome completo**
+  opzionale (es. principio attivo e dosaggio) usato nei promemoria e nelle email di rifornimento al posto
+  del nome breve.
 - **entity_id in inglese, stabili, sempre prefissati con il paziente** (prime 3 consonanti del nome, es.
   `mrr` per "Mario Rossi", con gestione automatica delle collisioni) — calcolati una sola volta alla
   creazione del paziente e stabili nel tempo anche se lo rinomini dopo, per non rompere
@@ -53,14 +55,20 @@ paziente e un dispositivo HA per ogni farmaco.
 - **Finestra ideale di riordino, per paziente**: due soglie (giorni minimi/massimi, editabili dalla toolbar
   del pannello) pensate per raggruppare più farmaci possibile in un'unica commissione — minimi = non
   aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di rifiuto del medico
-  per prescrizione anticipata). Il sensore per paziente `sensor.‹slug›_restock_reminder` elenca i farmaci
-  la cui stima di "giorni rimanenti" rientra in quella finestra, con un testo già formattato pronto per una
-  notifica/email (vedi sotto) e, per ciascun farmaco, la data di esaurimento prevista.
+  per prescrizione anticipata). Il sensore per paziente `sensor.‹slug›_restock_reminder` è "intelligente":
+  non segnala un farmaco ogni giorno per tutta l'ampiezza della finestra, ma aspetta il momento giusto per
+  raggrupparne il più possibile in un solo ordine, e non ripete un farmaco già segnalato finché non torna
+  davvero urgente (vedi [Blueprint pronte all'uso](#blueprint-pronte-alluso) per i dettagli e come
+  collegarlo a una notifica/email).
+- Ogni card farmaco nel pannello mostra anche il contenuto della confezione e la data di esaurimento
+  scorta prevista; le azioni quotidiane (assumi, segna non assunta, modifica, rifornisci) sono pulsanti a
+  icona (la pillola a due colori del logo, con un badge overlay) invece che testo.
 - Tutta la gestione (pazienti, farmaci, assunzioni, rifornimenti) avviene da un pannello dedicato nella
   sidebar di Home Assistant, separato da Lovelace: i farmaci del paziente selezionato sono mostrati come
   tile in griglia, non come un semplice elenco.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
-  per l'uso da automazioni.
+  per l'uso da automazioni, e due [blueprint](#blueprint-pronte-alluso) pronte all'uso per i promemoria di
+  assunzione e di rifornimento.
 
 ## Installazione
 
@@ -87,34 +95,63 @@ aggiungere un farmaco e icona per eliminare il paziente selezionato. Sotto, i fa
 tile in griglia, ciascuna con tutte le azioni quotidiane (assumi ora, segna come non assunta, rifornisci,
 modifica, elimina) — disponibili anche come entità/servizi standard di Home Assistant.
 
-## Promemoria rifornimento via email
+## Blueprint pronte all'uso
 
-NeoPill non gestisce l'invio di email direttamente (niente credenziali SMTP dentro l'integrazione): prepara
-solo i dati, tramite un sensore per paziente `sensor.‹slug_paziente›_restock_reminder` (es.
-`sensor.mrr_restock_reminder` per "Mario Rossi"). L'invio vero e proprio va fatto con un'automazione HA
-che usa un servizio `notify.*` email già configurato (es. l'integrazione nativa `smtp`, oppure Gmail/altri).
-Esempio (sostituisci l'entity_id con quello del tuo paziente):
+<a id="blueprint-pronte-alluso"></a>
 
-```yaml
-automation:
-  - alias: "NeoPill - promemoria rifornimento farmaci"
-    trigger:
-      - platform: time
-        at: "08:00:00"
-    condition:
-      - condition: numeric_state
-        entity_id: sensor.mrr_restock_reminder
-        above: 0
-    action:
-      - service: notify.smtp   # sostituisci con il tuo servizio notify email
-        data:
-          title: "NeoPill: farmaci da rifornire"
-          message: "{{ state_attr('sensor.mrr_restock_reminder', 'testo') }}"
-```
+Nel repository, sotto `blueprints/automation/bigurka/`, ci sono due blueprint di automazione Home Assistant
+pronte all'uso (nessuna scrittura di YAML richiesta). Per importarle: Impostazioni → Automazioni e scene →
+Blueprint → Importa blueprint, incollando l'URL della pagina GitHub del file, ad esempio:
+`https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
+
+### `neopill_dose_reminder.yaml` — Promemoria assunzione farmaci
+
+Monitora uno o più sensori "da assumere" (`binary_sensor.‹farmaco›_dose_due`) e invia **una sola notifica
+push cumulativa** — non una per farmaco — con l'elenco di tutto ciò che è dovuto in quel momento e due
+pulsanti, "Assumi tutti" / "Non assunto", che agiscono su tutto l'elenco insieme. Se non rispondi, la
+notifica si ripete a intervalli regolari (ricalcolando ogni volta l'elenco ancora dovuto); se nel frattempo
+un altro farmaco diventa dovuto, la notifica si aggiorna **subito**, senza aspettare la ripetizione
+successiva; quando non c'è più nulla di dovuto (hai risposto, o hai già segnato le dosi dal pannello), la
+notifica viene rimossa automaticamente dal telefono.
+
+**Configurazione consigliata**: una sola automazione per paziente, con *tutti* i sensori `dose_due` di quel
+paziente selezionati nel campo "Sensori 'Da assumere'" — non serve decidere tu le fasce orarie: il
+raggruppamento avviene da solo, istante per istante, in base a cosa è effettivamente dovuto in ogni
+momento (se un farmaco lo prendi da solo a un orario diverso dagli altri, riceverai comunque una notifica
+separata per lui, correttamente, perché è un momento diverso della giornata).
+
+### `neopill_restock_email.yaml` — Promemoria rifornimento con conferma email
+
+Ogni giorno, all'orario scelto, controlla il sensore `restock_reminder` del paziente; se ci sono farmaci da
+riordinare, invia una notifica push col testo del promemoria. Con **"Richiedi conferma prima dell'invio"**
+attivo (default, consigliato all'inizio per verificare che tutto sia impostato correttamente), la notifica
+include i pulsanti "Invia email"/"Annulla" e l'email parte solo alla conferma esplicita; disattivandolo, la
+notifica resta solo informativa e l'email parte subito, in automatico (comodo quando ormai il flusso serve
+solo come promemoria per passare in farmacia).
+
+L'azione di invio email è **completamente configurabile**: a differenza di un campo di testo fisso, puoi
+scegliere qualsiasi servizio disponibile in Home Assistant — non solo `notify.*` (es. l'integrazione nativa
+`smtp`, Gmail), ma anche servizi con uno schema di campi proprio, come `ms365_mail.mail_send` — e
+compilarne i campi reali (destinatari, oggetto, corpo, ecc.) come faresti in una normale automazione. Nel
+campo dove va il testo del messaggio, in modalità YAML, usa i modelli:
+
+- `{{ testo }}` — l'elenco dei farmaci da rifornire, già formattato (una riga per farmaco)
+- `{{ recipient_name }}` — il nome del destinatario, impostato nei campi della blueprint
+- `{{ sender_name }}` — il nome del mittente/firma, impostato nei campi della blueprint
+
+### Come funziona il sensore di rifornimento (`restock_reminder`)
+
+Il sensore **non** segnala un farmaco ogni giorno per tutta l'ampiezza della finestra di riordino, e non
+ripete un farmaco già segnalato in ogni email successiva. Un farmaco viene incluso nel testo/notifica in
+due soli casi: la prima volta che entra nella finestra (così sai che esiste, mentre si aspetta che magari
+altri lo raggiungano per lo stesso ordine), oppure — sempre, senza eccezioni — nel momento in cui diventa
+il più urgente (sta per scendere sotto il minimo), così non viene mai perso. Il ricalcolo della decisione
+avviene a mezzanotte, al riavvio di Home Assistant, o subito se modifichi i giorni Min/Max dalla toolbar
+del pannello.
 
 L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, giorni rimanenti, scorta, data
 di esaurimento prevista) se preferisci costruire un messaggio personalizzato invece di usare il testo già
-pronto. Se hai più pazienti, duplica l'automazione (o il trigger) per ciascun sensore.
+pronto in `testo`. Se hai più pazienti, importa la blueprint una volta per ciascun sensore/paziente.
 
 ## Permessi
 
@@ -129,7 +166,9 @@ ES standard, nessuna dipendenza esterna): non è previsto alcuno step di build, 
 i sorgenti stessi e vengono serviti così come sono. Le stringhe dell'interfaccia (IT/EN) sono in
 `panel_dist/i18n.js` — per aggiungere una lingua basta un'altra voce nell'oggetto `STRINGS` e un caso in
 più in `resolveLang()`. Allo stesso modo, i nomi delle entità sono in `strings.json`/`translations/*.json`
-tramite il meccanismo nativo di traduzione di Home Assistant.
+tramite il meccanismo nativo di traduzione di Home Assistant. Le blueprint HA sono file YAML indipendenti
+sotto `blueprints/automation/bigurka/`, non fanno parte del pacchetto Python/JS dell'integrazione e non
+seguono il numero di versione in `manifest.json`: per aggiornarle basta ri-importarle da HA dopo un push.
 
 ## Icona (brand)
 
@@ -147,12 +186,14 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.7.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
-nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente e pannello in tile
-(vedi Funzionalità). Non ancora testata a fondo su un uso quotidiano reale prolungato: prima di un uso in
-produzione, verificare l'installazione secondo i passi in [Installazione](#installazione) e provare i
-flussi principali (creazione paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione
-paziente) su un ambiente di test.
+v0.11.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
+automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, e due blueprint HA pronte all'uso
+per i promemoria di assunzione e rifornimento (vedi Funzionalità e Blueprint pronte all'uso). Non ancora
+testata a fondo su un uso quotidiano reale prolungato: prima di un uso in produzione, verificare
+l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali (creazione
+paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un ambiente di
+test.
 
 **Nota sui cambi di schema degli identificatori** (es. il passaggio a chiavi inglesi in v0.5.0): sono
 puramente lato codice — al primo riavvio dopo un aggiornamento del genere, farmaci e pazienti già esistenti
@@ -179,7 +220,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.7.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.11.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -190,7 +231,8 @@ patient and an HA device for each medication.
 - Each medication is its own HA device, named `"‹Medication› (‹Patient›)"`, with entities for stock, next
   dose, days of stock remaining, "dose due" state and "low stock" state. Two different patients with a
   medication of the same name stay completely independent (stock, schedule, history, device and entity_id
-  are all distinct).
+  are all distinct). An optional **full name** (e.g. active ingredient and dosage) can also be set, used in
+  reminders and restock emails instead of the short name.
 - **English, stable entity_ids, always prefixed with the patient** (first 3 consonants of the name, e.g.
   `mrr` for "Mario Rossi", with automatic collision handling) — computed once when the patient is created
   and stable over time even if you rename them later, so it never breaks automations/dashboards.
@@ -210,14 +252,20 @@ patient and an HA device for each medication.
 - **Per-patient ideal reorder window**: two thresholds (min/max days, editable from the panel toolbar)
   meant to help you batch as many medications as possible into a single pharmacy trip — min = don't leave
   it any later (risk of running out), max = don't order too early (risk of the prescription being refused
-  as premature). The per-patient sensor `sensor.‹slug›_restock_reminder` lists medications whose estimated
-  "days remaining" falls inside that window, with a ready-to-send text for a notification/email (see
-  below) and, for each medication, its predicted depletion date.
+  as premature). The per-patient sensor `sensor.‹slug›_restock_reminder` is "smart": it doesn't flag a
+  medication every day for the whole width of the window, it waits for the right moment to batch as many
+  as possible into one order, and never repeats an already-flagged medication until it's genuinely urgent
+  again (see [Ready-made blueprints](#ready-made-blueprints) for details and how to wire it to a
+  notification/email).
+- Each medication tile in the panel also shows the package content and the predicted stock-depletion date;
+  the everyday actions (take dose, mark as missed, edit, restock) are icon buttons (the two-tone pill from
+  the logo, with a small badge overlay) instead of text.
 - All management (patients, medications, intakes, restocks) happens from a dedicated panel in the Home
   Assistant sidebar, separate from Lovelace: the selected patient's medications are shown as tiles in a
   grid, not a plain list.
 - Home Assistant services (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`,
-  `neopill.rifornisci_farmaco`) for use in automations.
+  `neopill.rifornisci_farmaco`) for use in automations, plus two [ready-made
+  blueprints](#ready-made-blueprints) for dose and restock reminders.
 
 ## Installation
 
@@ -243,34 +291,63 @@ selected patient. Below, the patient's medications as tiles in a grid, each with
 (take dose, mark as missed, restock, edit, delete) — also available as standard Home Assistant
 entities/services.
 
-## Restock reminder via email
+## Ready-made blueprints
 
-NeoPill doesn't send email itself (no SMTP credentials inside the integration): it only prepares the data,
-via a per-patient sensor `sensor.‹patient_slug›_restock_reminder` (e.g. `sensor.mrr_restock_reminder` for
-"Mario Rossi"). The actual sending has to be done with an HA automation using an already-configured email
-`notify.*` service (e.g. the native `smtp` integration, or Gmail/others). Example (replace the entity_id
-with your patient's):
+<a id="ready-made-blueprints"></a>
 
-```yaml
-automation:
-  - alias: "NeoPill - restock reminder"
-    trigger:
-      - platform: time
-        at: "08:00:00"
-    condition:
-      - condition: numeric_state
-        entity_id: sensor.mrr_restock_reminder
-        above: 0
-    action:
-      - service: notify.smtp   # replace with your email notify service
-        data:
-          title: "NeoPill: medications to reorder"
-          message: "{{ state_attr('sensor.mrr_restock_reminder', 'testo') }}"
-```
+The repository ships two ready-to-use Home Assistant automation blueprints under
+`blueprints/automation/bigurka/` (no YAML writing required). To import one: Settings → Automations &
+scenes → Blueprints → Import blueprint, pasting the file's GitHub page URL, e.g.
+`https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
+
+### `neopill_dose_reminder.yaml` — dose reminder
+
+Watches one or more "dose due" sensors (`binary_sensor.‹medication›_dose_due`) and sends **one cumulative
+push notification** - not one per medication - listing everything currently due, with two buttons, "Take
+all" / "Not taken", acting on the whole list at once. If you don't answer, the notification repeats at
+regular intervals (recomputing the still-due list each time); if another medication becomes due in the
+meantime, the notification updates **immediately** instead of waiting for the next repeat; once nothing is
+due anymore (you answered, or already logged the doses from the panel), the notification is cleared from
+the phone automatically.
+
+**Recommended setup**: one automation per patient, with *all* of that patient's `dose_due` sensors
+selected in the "'Due' sensors" field - you don't need to decide time slots yourself: grouping happens on
+its own, moment to moment, based on what's actually due right then (a medication you take alone at a
+different time will still get its own separate notification, correctly, since that's a genuinely different
+moment of the day).
+
+### `neopill_restock_email.yaml` — restock reminder with email confirmation
+
+Every day, at the chosen time, checks the patient's `restock_reminder` sensor; if there are medications to
+reorder, it sends a push notification with the reminder text. With **"Require confirmation before
+sending"** enabled (default, recommended at first to verify everything is set up correctly), the
+notification includes "Send email"/"Cancel" buttons and the email only goes out on explicit confirmation;
+disabling it makes the notification purely informational and the email send immediately, automatically
+(handy once the flow is trusted and only needed as a pharmacy-visit reminder).
+
+The email-sending action is **fully configurable**: instead of a fixed text field, you pick any service
+available in Home Assistant - not just `notify.*` (e.g. the native `smtp` integration, Gmail), but also
+services with their own field schema, like `ms365_mail.mail_send` - and fill in its real fields
+(recipients, subject, body, etc.) just like in a normal automation. In the field that holds the message
+text, in YAML mode, use these templates:
+
+- `{{ testo }}` - the list of medications to reorder, already formatted (one line per medication)
+- `{{ recipient_name }}` - the recipient's name, set in the blueprint's own fields
+- `{{ sender_name }}` - the sender/signature name, set in the blueprint's own fields
+
+### How the restock sensor (`restock_reminder`) works
+
+The sensor does **not** flag a medication every day for the whole width of the reorder window, and it
+doesn't repeat an already-flagged medication in every following email. A medication is included in the
+text/notification in exactly two cases: the first time it enters the window (so you know it exists, while
+waiting for others to possibly join the same order), or - always, without exception - the moment it
+becomes the most urgent one (about to drop below the minimum), so it's never silently missed. The decision
+is recomputed at midnight, on Home Assistant restart, or immediately if you change the Min/Max days from
+the panel toolbar.
 
 The sensor's `farmaci` attribute also holds the structured list (name, days remaining, stock, predicted
-depletion date) if you'd rather build a custom message instead of using the ready-made text. If you have
-more than one patient, duplicate the automation (or its trigger) per sensor.
+depletion date) if you'd rather build a custom message instead of using the ready-made `testo` text. If you
+have more than one patient, import the blueprint once per sensor/patient.
 
 ## Permissions
 
@@ -283,7 +360,10 @@ The panel (`custom_components/neopill/panel_dist/`) is written in native JavaScr
 ES modules, no external dependencies): there is no build step, the files under `panel_dist/` are the source
 themselves and are served as-is. UI strings (it/en) live in `panel_dist/i18n.js` — adding a language is just
 another entry in the `STRINGS` object plus a case in `resolveLang()`. Likewise, entity names live in
-`strings.json`/`translations/*.json` via Home Assistant's native translation mechanism.
+`strings.json`/`translations/*.json` via Home Assistant's native translation mechanism. The HA blueprints
+are standalone YAML files under `blueprints/automation/bigurka/` - they're not part of the integration's
+Python/JS package and don't follow the `manifest.json` version number: re-import them from HA after a push
+to pick up changes.
 
 ## Icon (brand)
 
@@ -301,11 +381,13 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.7.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
-with localized names/UI, weekly scheduling, a per-patient reorder window, and a tiled panel layout (see
-Features). Not yet battle-tested over extended real-world daily use: before relying on it in production,
-verify the install following [Installation](#installation) and try the main flows (creating a
-patient/medication, taking a dose, restocking, dose reminders, deleting a patient) in a test environment.
+v0.11.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
+repeats), a tiled panel with icon buttons, and two ready-made HA blueprints for dose and restock reminders
+(see Features and Ready-made blueprints). Not yet battle-tested over extended real-world daily use: before
+relying on it in production, verify the install following [Installation](#installation) and try the main
+flows (creating a patient/medication, taking a dose, restocking, dose reminders, deleting a patient) in a
+test environment.
 
 **A note on identifier-scheme changes** (e.g. the switch to English keys in v0.5.0): these are purely
 code-side - on the first restart after such an update, existing medications and patients automatically get

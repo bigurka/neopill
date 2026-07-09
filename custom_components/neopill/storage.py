@@ -122,6 +122,13 @@ class NeoPillStore:
         async_dispatcher_send(self._hass, SIGNAL_PATIENT_UPDATED, patient)
         return patient
 
+    async def async_set_restock_reported_ids(self, patient_id: str, medication_ids: list[str]) -> None:
+        """Internal bookkeeping for RestockReminderSensor - not user-facing config, so this
+        skips validation/SIGNAL_PATIENT_UPDATED and just persists (debounced)."""
+        patient = self.get_patient(patient_id)
+        patient.restock_reported_ids = medication_ids
+        self._async_delay_save()
+
     async def async_delete_patient(self, patient_id: str) -> None:
         self.get_patient(patient_id)
         for medication in self.list_medications(patient_id=patient_id):
