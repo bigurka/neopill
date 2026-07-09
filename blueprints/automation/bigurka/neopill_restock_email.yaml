@@ -85,7 +85,7 @@ trigger:
 
 condition:
   - condition: template
-    value_template: "{{ states(!input restock_sensor) not in ['0', 'unknown', 'unavailable'] }}"
+    value_template: "{{ states(restock_sensor) not in ['0', 'unknown', 'unavailable'] }}"
 
 variables:
   restock_sensor: !input restock_sensor
