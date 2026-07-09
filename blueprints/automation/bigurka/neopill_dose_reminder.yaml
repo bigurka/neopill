@@ -1,16 +1,19 @@
 blueprint:
-  name: NeoPill - Promemoria assunzione farmaci (fascia oraria)
+  name: NeoPill - Promemoria assunzione farmaci
   description: >-
-    Quando una o più dosi di farmaci NeoPill risultano "da assumere" tra
-    quelle scelte (es. tutti i farmaci di una stessa fascia oraria, o tutti
-    quelli di un paziente), invia UNA notifica push cumulativa con l'elenco
-    di tutti i farmaci attualmente dovuti e i pulsanti "Assumi tutti" /
-    "Non assunto". Se non arriva nessuna risposta, la notifica viene
-    ripetuta a intervalli regolari (ricalcolando ogni volta l'elenco
-    aggiornato dei farmaci ancora dovuti) finché non si risponde o finché
-    tutte le dosi non si risolvono da sole. Alla risposta, viene chiamato
-    neopill.assumi_farmaco oppure neopill.segna_non_assunta per ciascun
-    farmaco ancora dovuto in quel momento.
+    Seleziona tutti i sensori "dose_due" dei farmaci di un paziente (o un
+    sottoinsieme): quando una o più dosi risultano "da assumere", invia UNA
+    notifica push cumulativa con l'elenco dei farmaci attualmente dovuti e
+    i pulsanti "Assumi tutti" / "Non assunto". Il raggruppamento per fascia
+    oraria avviene da solo: la notifica include, istante per istante, solo
+    i farmaci dovuti in quel momento. Se un altro farmaco diventa dovuto
+    mentre il promemoria è ancora attivo, la notifica si aggiorna subito
+    includendolo. Se non arriva nessuna risposta, la notifica viene
+    ripetuta a intervalli regolari finché non si risponde o finché tutte
+    le dosi non si risolvono da sole (es. assunte dal pannello); in quel
+    caso la notifica viene rimossa automaticamente dal telefono. Alla
+    risposta, viene chiamato neopill.assumi_farmaco oppure
+    neopill.segna_non_assunta per ciascun farmaco ancora dovuto.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml
@@ -18,9 +21,10 @@ blueprint:
     dose_due_entities:
       name: Sensori "Da assumere"
       description: >-
-        I binary_sensor "dose_due" dei farmaci NeoPill da monitorare insieme
-        (es. tutti i farmaci della stessa fascia oraria di un paziente, o
-        anche tutti i farmaci del paziente).
+        I binary_sensor "dose_due" dei farmaci NeoPill da monitorare insieme.
+        Consigliato: seleziona TUTTI i farmaci del paziente e crea una sola
+        automazione - il raggruppamento per fascia oraria avviene
+        automaticamente in base a quali dosi sono dovute in ogni momento.
       selector:
         entity:
           multiple: true
@@ -55,6 +59,7 @@ blueprint:
           mode: box
 
 mode: single
+max_exceeded: silent
 
 trigger:
   - platform: state
@@ -105,11 +110,16 @@ action:
               event_type: mobile_app_notification_action
               event_data:
                 action: "NEOPILL_NON_ASSUNTO_{{ context.id }}"
+            - platform: state
+              entity_id: !input dose_due_entities
+              to: "on"
           timeout:
             minutes: !input repeat_interval_minutes
           continue_on_timeout: true
         - choose:
-            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_TUTTI_ASSUNTI_') }}"
+            - conditions: >-
+                {{ wait.trigger is not none and wait.trigger.platform == 'event'
+                   and wait.trigger.event.data.action.startswith('NEOPILL_TUTTI_ASSUNTI_') }}
               sequence:
                 - repeat:
                     for_each: "{{ farmaci_dovuti }}"
@@ -117,7 +127,9 @@ action:
                       - action: neopill.assumi_farmaco
                         data:
                           medication_id: "{{ repeat.item.id }}"
-            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_NON_ASSUNTO_') }}"
+            - conditions: >-
+                {{ wait.trigger is not none and wait.trigger.platform == 'event'
+                   and wait.trigger.event.data.action.startswith('NEOPILL_NON_ASSUNTO_') }}
               sequence:
                 - repeat:
                     for_each: "{{ farmaci_dovuti }}"
@@ -125,3 +137,8 @@ action:
                       - action: neopill.segna_non_assunta
                         data:
                           medication_id: "{{ repeat.item.id }}"
+  - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
+    data:
+      message: clear_notification
+      data:
+        tag: "neopill_dose_group_{{ context.id }}"
