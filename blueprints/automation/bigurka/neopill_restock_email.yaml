@@ -5,8 +5,9 @@ blueprint:
     NeoPill di un paziente. Se ci sono farmaci da riordinare, invia una
     notifica push al dispositivo mobile scelto con il testo del promemoria,
     da rivedere. Solo alla conferma esplicita (pulsante "Invia email"),
-    il testo viene inviato via email al servizio notify e agli indirizzi
-    indicati; con "Annulla" non viene inviato nulla.
+    viene eseguita l'azione di invio email che hai configurato tu stesso
+    (qualsiasi servizio disponibile in Home Assistant, coi suoi campi
+    specifici); con "Annulla" non viene inviato nulla.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_restock_email.yaml
@@ -32,19 +33,19 @@ blueprint:
       default: "09:00:00"
       selector:
         time:
-    email_notify_service:
-      name: Servizio email
+    email_action:
+      name: Azione di invio email
       description: >-
-        Nome del servizio notify da usare per l'invio dell'email (es.
-        "notify.smtp" o "notify.gmail"), configurato separatamente in
-        Home Assistant.
+        L'azione da eseguire per inviare l'email quando confermi (es.
+        ms365_mail.mail_send, notify.smtp, notify.gmail o qualsiasi altro
+        servizio email disponibile in Home Assistant). Scegli il servizio
+        e compila i suoi campi come faresti in una normale automazione
+        (destinatari, oggetto, ecc.). Nel campo dove va il testo del
+        messaggio, passa in modalità YAML e usa il modello
+        "{{ testo }}" per includere l'elenco dei farmaci da rifornire
+        generato automaticamente.
       selector:
-        text:
-    email_recipients:
-      name: Destinatari email
-      description: Uno o più indirizzi email, separati da virgola.
-      selector:
-        text:
+        action: {}
     confirm_timeout_minutes:
       name: Timeout conferma (minuti)
       description: >-
@@ -71,8 +72,6 @@ condition:
 variables:
   restock_sensor: !input restock_sensor
   notify_device: !input notify_device
-  email_notify_service: !input email_notify_service
-  email_recipients: !input email_recipients
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
 
 action:
@@ -102,9 +101,4 @@ action:
   - if:
       - condition: template
         value_template: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
-    then:
-      - action: "{{ email_notify_service }}"
-        data:
-          title: "Promemoria rifornimento farmaci"
-          message: "{{ testo }}"
-          target: "{{ email_recipients.split(',') | map('trim') | list }}"
+    then: !input email_action

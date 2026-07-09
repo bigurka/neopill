@@ -1,24 +1,29 @@
 blueprint:
-  name: NeoPill - Promemoria assunzione farmaco
+  name: NeoPill - Promemoria assunzione farmaci (fascia oraria)
   description: >-
-    Quando una dose di un farmaco NeoPill risulta "da assumere", invia una
-    notifica push azionabile con i pulsanti "Assunto" / "Non assunto" al
-    dispositivo mobile scelto. Se non arriva nessuna risposta, la notifica
-    viene ripetuta a intervalli regolari finché non si risponde (o finché
-    il promemoria non si risolve da solo, ad es. perché la dose è scaduta).
-    Alla risposta, viene chiamato il servizio neopill.assumi_farmaco oppure
-    neopill.segna_non_assunta per il farmaco corrispondente.
+    Quando una o più dosi di farmaci NeoPill risultano "da assumere" tra
+    quelle scelte (es. tutti i farmaci di una stessa fascia oraria, o tutti
+    quelli di un paziente), invia UNA notifica push cumulativa con l'elenco
+    di tutti i farmaci attualmente dovuti e i pulsanti "Assumi tutti" /
+    "Non assunto". Se non arriva nessuna risposta, la notifica viene
+    ripetuta a intervalli regolari (ricalcolando ogni volta l'elenco
+    aggiornato dei farmaci ancora dovuti) finché non si risponde o finché
+    tutte le dosi non si risolvono da sole. Alla risposta, viene chiamato
+    neopill.assumi_farmaco oppure neopill.segna_non_assunta per ciascun
+    farmaco ancora dovuto in quel momento.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml
   input:
-    dose_due_entity:
-      name: Sensore "Da assumere"
+    dose_due_entities:
+      name: Sensori "Da assumere"
       description: >-
-        Il binary_sensor "dose_due" del farmaco NeoPill da monitorare (uno per
-        farmaco).
+        I binary_sensor "dose_due" dei farmaci NeoPill da monitorare insieme
+        (es. tutti i farmaci della stessa fascia oraria di un paziente, o
+        anche tutti i farmaci del paziente).
       selector:
         entity:
+          multiple: true
           domain: binary_sensor
           integration: neopill
     notify_device:
@@ -53,38 +58,49 @@ mode: single
 
 trigger:
   - platform: state
-    entity_id: !input dose_due_entity
+    entity_id: !input dose_due_entities
     to: "on"
 
 variables:
-  dose_due_entity: !input dose_due_entity
+  dose_due_entities: !input dose_due_entities
   notify_device: !input notify_device
-  medication_id: "{{ state_attr(dose_due_entity, 'medication_id') }}"
-  medication_name: "{{ state_attr(dose_due_entity, 'medication_full_name') or state_attr(dose_due_entity, 'medication_name') or 'farmaco' }}"
   max_repeats: !input max_repeats
 
 action:
   - repeat:
       while:
         - condition: template
-          value_template: "{{ is_state(dose_due_entity, 'on') and repeat.index <= max_repeats }}"
+          value_template: >-
+            {{ dose_due_entities | select('is_state', 'on') | list | count > 0
+               and repeat.index <= max_repeats }}
       sequence:
+        - variables:
+            farmaci_dovuti: >-
+              {% set ns = namespace(items=[]) %}
+              {% for e in dose_due_entities if is_state(e, 'on') %}
+                {% set ns.items = ns.items + [{
+                     'id': state_attr(e, 'medication_id'),
+                     'name': state_attr(e, 'medication_full_name') or state_attr(e, 'medication_name') or 'farmaco',
+                   }] %}
+              {% endfor %}
+              {{ ns.items }}
         - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
           data:
-            title: "Promemoria farmaco"
-            message: "È ora di assumere {{ medication_name }}."
+            title: "Promemoria farmaci"
+            message: >-
+              È ora di assumere: {{ farmaci_dovuti | map(attribute='name') | join(', ') }}.
             data:
-              tag: "neopill_dose_{{ medication_id }}"
+              tag: "neopill_dose_group_{{ context.id }}"
               actions:
-                - action: "NEOPILL_ASSUNTO_{{ context.id }}"
-                  title: "Assunto"
+                - action: "NEOPILL_TUTTI_ASSUNTI_{{ context.id }}"
+                  title: "Assumi tutti"
                 - action: "NEOPILL_NON_ASSUNTO_{{ context.id }}"
                   title: "Non assunto"
         - wait_for_trigger:
             - platform: event
               event_type: mobile_app_notification_action
               event_data:
-                action: "NEOPILL_ASSUNTO_{{ context.id }}"
+                action: "NEOPILL_TUTTI_ASSUNTI_{{ context.id }}"
             - platform: event
               event_type: mobile_app_notification_action
               event_data:
@@ -93,13 +109,19 @@ action:
             minutes: !input repeat_interval_minutes
           continue_on_timeout: true
         - choose:
-            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_ASSUNTO_') }}"
+            - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_TUTTI_ASSUNTI_') }}"
               sequence:
-                - action: neopill.assumi_farmaco
-                  data:
-                    medication_id: "{{ medication_id }}"
+                - repeat:
+                    for_each: "{{ farmaci_dovuti }}"
+                    sequence:
+                      - action: neopill.assumi_farmaco
+                        data:
+                          medication_id: "{{ repeat.item.id }}"
             - conditions: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_NON_ASSUNTO_') }}"
               sequence:
-                - action: neopill.segna_non_assunta
-                  data:
-                    medication_id: "{{ medication_id }}"
+                - repeat:
+                    for_each: "{{ farmaci_dovuti }}"
+                    sequence:
+                      - action: neopill.segna_non_assunta
+                        data:
+                          medication_id: "{{ repeat.item.id }}"
