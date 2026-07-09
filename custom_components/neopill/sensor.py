@@ -259,15 +259,11 @@ class RestockReminderSensor(SensorEntity):
                     "data_esaurimento_prevista": depletion_date.isoformat() if depletion_date else None,
                 }
             )
-            lines.append(
-                f"- {display_name}: {remaining} giorni rimanenti "
-                f"(esaurimento previsto {depletion_date.strftime('%d/%m/%Y')}), "
-                f"scorta {medication.stock_quantity} unità"
-            )
+            lines.append(f"- {display_name}: {remaining} giorni rimanenti")
         window_min = patient.restock_window_min_days if patient else "-"
         window_max = patient.restock_window_max_days if patient else "-"
         testo = (
-            f"Farmaci da rifornire (finestra {window_min}-{window_max} giorni):\n" + "\n".join(lines)
+            "\n".join(lines)
             if lines
             else f"Nessun farmaco da rifornire nella finestra {window_min}-{window_max} giorni."
         )
