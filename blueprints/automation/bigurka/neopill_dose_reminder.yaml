@@ -9,11 +9,15 @@ blueprint:
     i farmaci dovuti in quel momento. Se un altro farmaco diventa dovuto
     mentre il promemoria è ancora attivo, la notifica si aggiorna subito
     includendolo. Se non arriva nessuna risposta, la notifica viene
-    ripetuta a intervalli regolari finché non si risponde o finché tutte
-    le dosi non si risolvono da sole (es. assunte dal pannello); in quel
-    caso la notifica viene rimossa automaticamente dal telefono. Alla
-    risposta, viene chiamato neopill.assumi_farmaco oppure
-    neopill.segna_non_assunta per ciascun farmaco ancora dovuto.
+    ripetuta a intervalli regolari (fino al numero massimo configurato, per
+    sicurezza) finché non si risponde o finché tutte le dosi non si
+    risolvono da sole (es. assunte dal pannello); in quel caso la notifica
+    viene rimossa automaticamente dal telefono. Se anche dopo il numero
+    massimo di ripetizioni una dose resta irrisolta, il ciclo di notifiche
+    riparte comunque da capo alla mezzanotte successiva, così un promemoria
+    dimenticato non resta silenzioso per sempre. Alla risposta, viene
+    chiamato neopill.assumi_farmaco oppure neopill.segna_non_assunta per
+    ciascun farmaco ancora dovuto.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml
@@ -65,6 +69,8 @@ trigger:
   - platform: state
     entity_id: !input dose_due_entities
     to: "on"
+  - platform: time
+    at: "00:00:05"
 
 variables:
   dose_due_entities: !input dose_due_entities

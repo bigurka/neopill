@@ -40,8 +40,13 @@ WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 INTAKE_STATUS_TAKEN = "taken"
 INTAKE_STATUS_MISSED = "missed"
+# Auto-recorded by DoseScheduler at midnight (or on restart, for a day already crossed)
+# for a dose that was never answered (neither taken nor explicitly marked missed) -
+# distinct from INTAKE_STATUS_MISSED, which is always a deliberate user action.
+INTAKE_STATUS_UNANSWERED = "unanswered"
 
 CALENDAR_EVENT_TAKEN = "assunta"
 CALENDAR_EVENT_MISSED = "non_assunta"
+CALENDAR_EVENT_UNANSWERED = "nessuna_risposta"
 CALENDAR_EVENT_RESTOCK = "rifornimento"
 CALENDAR_EVENT_DEPLETED = "scorta_esaurita"

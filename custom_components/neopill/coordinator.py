@@ -14,7 +14,11 @@ import logging
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
-from homeassistant.helpers.event import async_track_point_in_time, async_track_time_interval
+from homeassistant.helpers.event import (
+    async_track_point_in_time,
+    async_track_time_change,
+    async_track_time_interval,
+)
 import homeassistant.util.dt as dt_util
 
 from .const import (
@@ -51,10 +55,19 @@ def _parse_time_str(time_str: str) -> tuple[int, int] | None:
 
 
 def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | None:
-    """Pure function: first schedule occurrence strictly after `reference`."""
+    """Pure function: first schedule occurrence strictly after `reference`.
+
+    Fixed-times and weekly schedules store wall-clock times (e.g. "06:00") that must be
+    interpreted in the local timezone - but `reference` can be UTC (IntakeEvent.timestamp
+    is stored via dt_util.utcnow()), so it's converted to local before any `.replace(hour=...)`
+    call. Without this, a hand-off from a UTC reference would set the *UTC* hour/minute
+    instead of the local one, shifting every computed occurrence by the local UTC offset
+    (e.g. +2h in Italy during CEST).
+    """
     if schedule.schedule_type == SCHEDULE_TYPE_FIXED_TIMES:
         if not schedule.fixed_times:
             return None
+        local_reference = dt_util.as_local(reference)
         candidates: list[datetime] = []
         for time_str in schedule.fixed_times:
             parsed = _parse_time_str(time_str)
@@ -62,9 +75,9 @@ def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | 
                 continue
             hour, minute = parsed
             for day_offset in (0, 1):
-                day = reference + timedelta(days=day_offset)
+                day = local_reference + timedelta(days=day_offset)
                 candidate = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if candidate > reference:
+                if candidate > local_reference:
                     candidates.append(candidate)
         return min(candidates) if candidates else None
     if schedule.schedule_type == SCHEDULE_TYPE_INTERVAL:
@@ -74,9 +87,10 @@ def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | 
     if schedule.schedule_type == SCHEDULE_TYPE_WEEKLY:
         if not schedule.weekly_times:
             return None
+        local_reference = dt_util.as_local(reference)
         candidates: list[datetime] = []
         for day_offset in range(0, 8):
-            day = reference + timedelta(days=day_offset)
+            day = local_reference + timedelta(days=day_offset)
             times = schedule.weekly_times.get(WEEKDAY_KEYS[day.weekday()])
             if not times:
                 continue
@@ -86,7 +100,7 @@ def _next_occurrence(schedule: DoseSchedule, reference: datetime) -> datetime | 
                     continue
                 hour, minute = parsed
                 candidate = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if candidate > reference:
+                if candidate > local_reference:
                     candidates.append(candidate)
         return min(candidates) if candidates else None
     return None
@@ -103,6 +117,7 @@ class DoseScheduler:
         self._cancel_timers: dict[str, Callable[[], None]] = {}
         self._unsub_signals: list[Callable[[], None]] = []
         self._unsub_sweep: Callable[[], None] | None = None
+        self._unsub_midnight: Callable[[], None] | None = None
 
     async def async_setup(self) -> None:
         self._unsub_signals = [
@@ -113,13 +128,23 @@ class DoseScheduler:
         ]
         for medication in self._store.list_medications():
             self._recompute(medication, reference=self._startup_reference(medication.id))
+        # Catches a restart that happened between midnight and when the scheduled
+        # callback below would have fired - without this, a dose left unresolved
+        # from a previous day could sit stuck until the *next* midnight.
+        self._resolve_stale_due_medications()
         self._unsub_sweep = async_track_time_interval(
             self._hass,
             self._async_safety_sweep,
             timedelta(minutes=DEFAULT_SAFETY_SWEEP_INTERVAL_MINUTES),
         )
+        self._unsub_midnight = async_track_time_change(
+            self._hass, self._handle_midnight, hour=0, minute=0, second=10
+        )
 
     async def async_unload(self) -> None:
+        if self._unsub_midnight is not None:
+            self._unsub_midnight()
+            self._unsub_midnight = None
         for unsub in self._unsub_signals:
             unsub()
         self._unsub_signals = []
@@ -228,3 +253,32 @@ class DoseScheduler:
                 _LOGGER.debug("Safety sweep found overdue dose for %s", medication_id)
                 self._cancel_timers.pop(medication_id, lambda: None)()
                 self._set_due(medication_id, True)
+
+    @callback
+    def _handle_midnight(self, _now: datetime) -> None:
+        self._resolve_stale_due_medications()
+
+    @callback
+    def _resolve_stale_due_medications(self) -> None:
+        """Auto-record "no response" for any dose still due from a previous calendar day.
+
+        Without this, a forgotten dose just sits "due" forever once the reminder
+        automation's own repeat/retry budget runs out, since nothing ever makes its
+        dose_due binary_sensor toggle off and back on again for automations to react
+        to. Recording it here does two things: leaves an explicit "nessuna risposta"
+        entry in the calendar (distinct from an explicit "missed"), and - via the
+        normal SIGNAL_INTAKE_RECORDED -> _on_intake_recorded path - advances the
+        schedule to the next real occurrence, which naturally toggles the sensor.
+        Runs once at startup (for a restart that happened after midnight but before
+        this would have fired) and every midnight after that.
+        """
+        today = dt_util.now().date()
+        for medication_id, due_at in list(self._due_at.items()):
+            if not self._is_due.get(medication_id):
+                continue
+            if dt_util.as_local(due_at).date() >= today:
+                continue
+            _LOGGER.debug("No response for overdue dose of %s, resolving at day boundary", medication_id)
+            self._hass.async_create_task(
+                self._store.async_record_unanswered(medication_id, scheduled_for=due_at)
+            )

@@ -20,9 +20,11 @@ from .const import (
     CALENDAR_EVENT_MISSED,
     CALENDAR_EVENT_RESTOCK,
     CALENDAR_EVENT_TAKEN,
+    CALENDAR_EVENT_UNANSWERED,
     DEFAULT_LOW_STOCK_DAYS_THRESHOLD,
     INTAKE_STATUS_MISSED,
     INTAKE_STATUS_TAKEN,
+    INTAKE_STATUS_UNANSWERED,
     SIGNAL_INTAKE_RECORDED,
     SIGNAL_MEDICATION_ADDED,
     SIGNAL_MEDICATION_REMOVED,
@@ -265,6 +267,24 @@ class NeoPillStore:
         async_dispatcher_send(self._hass, SIGNAL_INTAKE_RECORDED, event)
         return event
 
+    async def async_record_unanswered(
+        self, medication_id: str, *, scheduled_for: datetime | None = None
+    ) -> IntakeEvent:
+        """Auto-recorded by DoseScheduler when a dose is still due at the next midnight -
+        distinct from async_record_missed, which is always an explicit user action."""
+        self.get_medication(medication_id)
+        event = IntakeEvent(
+            medication_id=medication_id,
+            timestamp=dt_util.utcnow(),
+            amount=0.0,
+            status=INTAKE_STATUS_UNANSWERED,
+            scheduled_for=scheduled_for,
+        )
+        self.intake_events.append(event)
+        await self._async_save()
+        async_dispatcher_send(self._hass, SIGNAL_INTAKE_RECORDED, event)
+        return event
+
     async def async_record_restock(
         self,
         medication_id: str,
@@ -328,6 +348,15 @@ class NeoPillStore:
                             "timestamp": intake.timestamp,
                         }
                     )
+            elif intake.status == INTAKE_STATUS_UNANSWERED:
+                results.append(
+                    {
+                        "type": CALENDAR_EVENT_UNANSWERED,
+                        "medication_id": intake.medication_id,
+                        "medication_name": med_name,
+                        "timestamp": intake.timestamp,
+                    }
+                )
             else:
                 results.append(
                     {
