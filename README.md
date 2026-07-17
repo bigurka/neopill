@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.11.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.14.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -69,6 +69,14 @@ paziente e un dispositivo HA per ogni farmaco.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
   per l'uso da automazioni, e due [blueprint](#blueprint-pronte-alluso) pronte all'uso per i promemoria di
   assunzione e di rifornimento.
+- **Fasce orarie a colori**: una legenda nella parte alta del pannello mostra un colore per ogni orario di
+  assunzione in uso; lo stesso colore tinteggia le righe corrispondenti nello storico, per riconoscere a
+  colpo d'occhio assunzioni fuori orario o mancate.
+- **Card Lovelace + dashboard automatica**: oltre al pannello dedicato, è disponibile una card riepilogo
+  per paziente (`custom:neopill-patient-card`) da aggiungere su qualsiasi dashboard esistente, e una
+  [strategy](#card-e-dashboard-lovelace) che genera automaticamente una dashboard con una vista per
+  paziente, senza posizionare nulla a mano. Card e strategy si registrano da sole, nessuna risorsa Lovelace
+  da aggiungere manualmente.
 
 ## Installazione
 
@@ -94,6 +102,40 @@ salvano da soli quando esci dal campo, con validazione), icona per rinominare il
 aggiungere un farmaco e icona per eliminare il paziente selezionato. Sotto, i farmaci del paziente come
 tile in griglia, ciascuna con tutte le azioni quotidiane (assumi ora, segna come non assunta, rifornisci,
 modifica, elimina) — disponibili anche come entità/servizi standard di Home Assistant.
+
+## Card e dashboard Lovelace
+
+<a id="card-e-dashboard-lovelace"></a>
+
+Oltre al pannello dedicato nella sidebar, NeoPill offre anche una card e una dashboard "strategy" per
+Lovelace, pensate per chi vuole vedere i farmaci di un paziente insieme al resto delle proprie dashboard.
+Si registrano da sole al riavvio di Home Assistant (nessun passaggio manuale in Impostazioni → Dashboard →
+Risorse).
+
+**Solo la card**, su una dashboard esistente: Modifica dashboard → Aggiungi card → cerca "NeoPill" → **NeoPill
+- Riepilogo paziente** → scegli il paziente dal menu a tendina dell'editor. La card mostra i farmaci da
+assumere ora (con pulsanti rapidi "assumi"/"non assunta" per il singolo farmaco, più due pulsanti accanto al
+titolo della sezione per assumere/segnare non assunti **tutti insieme** — lo stesso concetto dei pulsanti
+per fascia oraria del pannello, applicato a tutto ciò che è dovuto in quel momento), la prossima dose per gli
+altri farmaci, ed eventuali farmaci con scorte in esaurimento, con un link per aprire il pannello completo.
+
+C'è anche una seconda card, **NeoPill - Situazione scorte** (`custom:neopill-stock-card`), che non richiede
+configurazione: una tabella separata per paziente (ordinate per giorni di scorta rimanenti crescenti
+all'interno di ciascuna), con le righe sotto soglia evidenziate.
+
+**Dashboard automatica** (una vista per paziente più una vista scorte, generate da sole, niente card da
+posizionare a mano): crea una nuova dashboard, passa alla modalità YAML e usa:
+
+```yaml
+strategy:
+  type: custom:neopill
+views: []
+```
+
+La dashboard genererà automaticamente una vista per ciascun paziente esistente (titolo = nome del paziente,
+con la card riepilogo), più una vista finale **"Scorte"** con la tabella di tutti i farmaci di tutti i
+pazienti. Aggiungendo o eliminando un paziente dal pannello NeoPill, ricarica la dashboard per aggiornare
+l'elenco delle viste.
 
 ## Blueprint pronte all'uso
 
@@ -163,9 +205,11 @@ creare, modificare o eliminare pazienti e farmaci.
 
 Il pannello (`custom_components/neopill/panel_dist/`) è scritto in JavaScript nativo (Web Component, moduli
 ES standard, nessuna dipendenza esterna): non è previsto alcuno step di build, i file in `panel_dist/` sono
-i sorgenti stessi e vengono serviti così come sono. Le stringhe dell'interfaccia (IT/EN) sono in
-`panel_dist/i18n.js` — per aggiungere una lingua basta un'altra voce nell'oggetto `STRINGS` e un caso in
-più in `resolveLang()`. Allo stesso modo, i nomi delle entità sono in `strings.json`/`translations/*.json`
+i sorgenti stessi e vengono serviti così come sono. Nella stessa cartella vivono anche la card Lovelace
+(`neopill-card.js`) e la dashboard strategy (`neopill-strategy.js`), entrambe registrate automaticamente
+lato backend tramite `frontend.add_extra_js_url` (vedi `panel.py`) — nessuna risorsa Lovelace da aggiungere
+a mano. Le stringhe dell'interfaccia (IT/EN) sono in `panel_dist/i18n.js` — per aggiungere una lingua basta
+un'altra voce nell'oggetto `STRINGS` e un caso in più in `resolveLang()`. Allo stesso modo, i nomi delle entità sono in `strings.json`/`translations/*.json`
 tramite il meccanismo nativo di traduzione di Home Assistant. Le blueprint HA sono file YAML indipendenti
 sotto `blueprints/automation/bigurka/`, non fanno parte del pacchetto Python/JS dell'integrazione e non
 seguono il numero di versione in `manifest.json`: per aggiornarle basta ri-importarle da HA dopo un push.
@@ -186,10 +230,12 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.11.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.14.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
-automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, e due blueprint HA pronte all'uso
-per i promemoria di assunzione e rifornimento (vedi Funzionalità e Blueprint pronte all'uso). Non ancora
+automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
+e nello storico, due blueprint HA pronte all'uso per i promemoria di assunzione e rifornimento, e una card
+Lovelace più una dashboard automatica per paziente (vedi Funzionalità, Card e dashboard Lovelace e
+Blueprint pronte all'uso). Non ancora
 testata a fondo su un uso quotidiano reale prolungato: prima di un uso in produzione, verificare
 l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali (creazione
 paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un ambiente di
@@ -220,7 +266,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.11.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.14.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -266,6 +312,14 @@ patient and an HA device for each medication.
 - Home Assistant services (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`,
   `neopill.rifornisci_farmaco`) for use in automations, plus two [ready-made
   blueprints](#ready-made-blueprints) for dose and restock reminders.
+- **Color-coded time slots**: a legend at the top of the panel shows one color per dose time in use;
+  the same color tints the matching rows in the history table, so off-schedule or missed doses stand out
+  at a glance.
+- **Lovelace card + auto-generated dashboard**: besides the dedicated panel, a per-patient summary card
+  (`custom:neopill-patient-card`) is available to drop onto any existing dashboard, along with a
+  [strategy](#lovelace-card--dashboard) that auto-generates a full dashboard with one view per patient,
+  with zero manual card placement. Both the card and the strategy register themselves - no Lovelace
+  resource to add by hand.
 
 ## Installation
 
@@ -290,6 +344,38 @@ validation), an icon to rename the patient, an icon to add a medication, and an 
 selected patient. Below, the patient's medications as tiles in a grid, each with all the everyday actions
 (take dose, mark as missed, restock, edit, delete) — also available as standard Home Assistant
 entities/services.
+
+## Lovelace card & dashboard
+
+<a id="lovelace-card--dashboard"></a>
+
+Besides the dedicated sidebar panel, NeoPill also ships a Lovelace card and a dashboard "strategy", for
+anyone who wants a patient's medications alongside the rest of their dashboards. Both register themselves
+on Home Assistant restart (no manual step under Settings → Dashboards → Resources).
+
+**Just the card**, on an existing dashboard: Edit dashboard → Add card → search "NeoPill" → **NeoPill -
+Patient summary** → pick the patient from the editor's dropdown. The card shows medications due now (with
+per-medication "take"/"missed" buttons, plus two buttons next to the section title to take/mark-missed
+**all of them at once** — the same idea as the panel's per-time-slot buttons, applied to whatever is
+currently due), the next dose for the others, and any medications running low on stock, with a link to open
+the full panel.
+
+There's also a second card, **NeoPill - Stock overview** (`custom:neopill-stock-card`), which needs no
+configuration: a separate table per patient (sorted by days of stock remaining, ascending, within each),
+with rows below threshold highlighted.
+
+**Auto-generated dashboard** (one view per patient plus a stock view, all generated automatically, no card
+placement needed): create a new dashboard, switch it to YAML mode, and use:
+
+```yaml
+strategy:
+  type: custom:neopill
+views: []
+```
+
+The dashboard will automatically generate one view per existing patient (view title = patient name, with the
+summary card), plus a final **"Stock"** view with the all-patients medication table. After adding or
+deleting a patient from the NeoPill panel, reload the dashboard to refresh the list of views.
 
 ## Ready-made blueprints
 
@@ -358,8 +444,11 @@ a button, or a service). Only admin users can create, edit or delete patients an
 
 The panel (`custom_components/neopill/panel_dist/`) is written in native JavaScript (Web Component, standard
 ES modules, no external dependencies): there is no build step, the files under `panel_dist/` are the source
-themselves and are served as-is. UI strings (it/en) live in `panel_dist/i18n.js` — adding a language is just
-another entry in the `STRINGS` object plus a case in `resolveLang()`. Likewise, entity names live in
+themselves and are served as-is. The same folder also holds the Lovelace card (`neopill-card.js`) and the
+dashboard strategy (`neopill-strategy.js`), both auto-registered on the backend side via
+`frontend.add_extra_js_url` (see `panel.py`) - no Lovelace resource to add by hand. UI strings (it/en) live
+in `panel_dist/i18n.js` — adding a language is just another entry in the `STRINGS` object plus a case in
+`resolveLang()`. Likewise, entity names live in
 `strings.json`/`translations/*.json` via Home Assistant's native translation mechanism. The HA blueprints
 are standalone YAML files under `blueprints/automation/bigurka/` - they're not part of the integration's
 Python/JS package and don't follow the `manifest.json` version number: re-import them from HA after a push
@@ -381,10 +470,12 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.11.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.14.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
-repeats), a tiled panel with icon buttons, and two ready-made HA blueprints for dose and restock reminders
-(see Features and Ready-made blueprints). Not yet battle-tested over extended real-world daily use: before
+repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, two ready-made
+HA blueprints for dose and restock reminders, and a Lovelace card plus an auto-generated per-patient
+dashboard (see Features, Lovelace card & dashboard and Ready-made blueprints). Not yet battle-tested over
+extended real-world daily use: before
 relying on it in production, verify the install following [Installation](#installation) and try the main
 flows (creating a patient/medication, taking a dose, restocking, dose reminders, deleting a patient) in a
 test environment.

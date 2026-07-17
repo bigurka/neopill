@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 import pathlib
 
-from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
+from homeassistant.components.frontend import (
+    add_extra_js_url,
+    async_register_built_in_panel,
+    async_remove_panel,
+)
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 
@@ -47,6 +51,11 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         },
         require_admin=False,
     )
+    # Loads the Lovelace card + dashboard strategy on every frontend page, so they
+    # register themselves (customElements.define) without the user ever touching
+    # Settings > Dashboards > Resources by hand.
+    add_extra_js_url(hass, f"{_STATIC_URL_PATH}/neopill-card.js")
+    add_extra_js_url(hass, f"{_STATIC_URL_PATH}/neopill-strategy.js")
 
 
 async def async_unregister_panel(hass: HomeAssistant) -> None:
