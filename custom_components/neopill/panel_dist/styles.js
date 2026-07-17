@@ -117,6 +117,23 @@ export const styles = `
   button.iconbtn:hover { opacity: 1; }
   button:disabled { opacity: 0.4; cursor: default; }
 
+  .time-slot-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 12.5px;
+  }
+  .time-slot-legend-label { opacity: 0.6; }
+  .time-slot-chip {
+    background: rgba(var(--slot-rgb), 0.22);
+    border: 1px solid rgba(var(--slot-rgb), 0.5);
+    color: rgb(var(--slot-rgb));
+    padding: 3px 11px;
+    border-radius: 999px;
+  }
+
   .med-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

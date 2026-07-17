@@ -8,11 +8,51 @@ import { resolveLang, translate } from "./i18n.js";
 const EVENT_TYPE_KEYS = {
   assunta: "event_taken",
   non_assunta: "event_missed",
+  nessuna_risposta: "event_unanswered",
   rifornimento: "event_restock",
   scorta_esaurita: "event_depleted",
 };
 
 const WEEK_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+// Soft, low-opacity tints assigned to each distinct dose time-of-day (e.g. "06:00"),
+// reused both for the toolbar legend chips and for tinting matching history rows.
+const TIME_SLOT_COLORS = [
+  [139, 127, 255], // violet
+  [255, 177, 102], // amber
+  [94, 199, 182], // teal
+  [255, 140, 189], // pink
+  [126, 178, 255], // blue
+  [158, 214, 130], // green
+];
+const TIME_SLOT_MATCH_TOLERANCE_MINUTES = 90;
+const DOSE_EVENT_TYPES = new Set(["assunta", "non_assunta", "nessuna_risposta"]);
+
+function timeStrToMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Finds the patient's time slot closest to an event's actual local time, within
+// TIME_SLOT_MATCH_TOLERANCE_MINUTES (wraparound-aware, so 23:50 is "close" to 00:10).
+// Returns -1 if nothing is close enough - e.g. an ad-hoc dose taken well outside any
+// of the patient's usual times, which is deliberately left untinted.
+function closestTimeSlotIndex(isoTimestamp, slots) {
+  if (!slots.length) return -1;
+  const d = new Date(isoTimestamp);
+  const minutes = d.getHours() * 60 + d.getMinutes();
+  let bestIndex = -1;
+  let bestDiff = Infinity;
+  slots.forEach((slot, i) => {
+    const diffRaw = Math.abs(minutes - timeStrToMinutes(slot));
+    const diff = Math.min(diffRaw, 1440 - diffRaw);
+    if (diff <= TIME_SLOT_MATCH_TOLERANCE_MINUTES && diff < bestDiff) {
+      bestDiff = diff;
+      bestIndex = i;
+    }
+  });
+  return bestIndex;
+}
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({
@@ -278,13 +318,31 @@ class NeoPillPanel extends HTMLElement {
 
     const cards = this._medications.map((m) => this._renderMedicationCard(m)).join("");
 
+    const timeSlots = this._computeTimeSlots();
+    const legend = timeSlots.length
+      ? `<div class="time-slot-legend">
+          <span class="time-slot-legend-label">${this.t("time_slots_label")}</span>
+          ${timeSlots
+            .map((t, i) => {
+              const [r, g, b] = TIME_SLOT_COLORS[i % TIME_SLOT_COLORS.length];
+              return `<span class="time-slot-chip" style="--slot-rgb:${r},${g},${b}">${esc(t)}</span>`;
+            })
+            .join("")}
+        </div>`
+      : "";
+
     const historyRows = [...this._history]
       .reverse()
       .slice(0, 50)
       .map((e) => {
         const typeKey = EVENT_TYPE_KEYS[e.type];
         const label = typeKey ? this.t(typeKey) : e.type;
-        return `<tr>
+        const slotIndex = DOSE_EVENT_TYPES.has(e.type) ? closestTimeSlotIndex(e.timestamp, timeSlots) : -1;
+        const rowStyle =
+          slotIndex >= 0
+            ? ` style="background:rgba(${TIME_SLOT_COLORS[slotIndex % TIME_SLOT_COLORS.length].join(",")},0.13)"`
+            : "";
+        return `<tr${rowStyle}>
           <td>${this._fmtDateTime(e.timestamp)}</td>
           <td>${esc(label)}</td>
           <td>${esc(e.medication_name)}</td>
@@ -295,6 +353,7 @@ class NeoPillPanel extends HTMLElement {
 
     main.innerHTML = `
       ${errorBanner}
+      ${legend}
       ${cards ? `<div class="med-grid">${cards}</div>` : `<div class="empty-state">${this.t("no_medications")}</div>`}
       <section class="history">
         <h3>${this.t("history_title")}</h3>
@@ -305,6 +364,17 @@ class NeoPillPanel extends HTMLElement {
         }
       </section>
     `;
+  }
+
+  _computeTimeSlots() {
+    const times = new Set();
+    for (const m of this._medications) {
+      const schedule = m.dose_schedule;
+      if (!schedule) continue;
+      (schedule.fixed_times || []).forEach((t) => times.add(t));
+      Object.values(schedule.weekly_times || {}).forEach((list) => (list || []).forEach((t) => times.add(t)));
+    }
+    return [...times].sort();
   }
 
   // ---- Pill glyph (matches the NeoPill brand mark) used inside icon-action buttons ----
