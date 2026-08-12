@@ -155,20 +155,18 @@ class RestockReminderSensor(SensorEntity):
     """Per-patient summary of that patient's medications ready to batch into one order.
 
     Lives on the patient's "<Nome> NeoPill" hub device (cleaned up automatically
-    when that device is removed on patient deletion). A medication becomes a
-    *candidate* once its estimated days-remaining falls within that patient's own
-    "ideal reorder window" (Patient.restock_window_min_days/max_days, editable
-    from the panel). The sensor's state is the count of medications being reported
-    *today*: each candidate is reported once, either the moment it first enters the
-    window (so you learn about it while there's still time to wait for others to
-    join the same order) or - always - the moment it becomes the most urgent one
-    (so nothing is ever silently missed), whichever comes first. A candidate that
-    was already reported and isn't yet urgent again is not repeated in later
-    batches, so a slow-to-restock medication doesn't reappear in every email while
-    it waits alongside newer, more urgent ones. This decision is only recomputed
-    at midnight and on HA restart (not on every live change), so the state stays
-    stable for automations that check it once a day. The "testo" attribute is a
-    ready-to-send summary for a notify.* automation.
+    when that device is removed on patient deletion). A medication is a *candidate*
+    once its estimated days-remaining falls at or below that patient's own "ideal
+    reorder window" max (Patient.restock_window_max_days, editable from the panel) -
+    no lower bound, so a medication doesn't drop out of consideration just because
+    it's now more overdue than the window's min. The sensor only reports something
+    once at least one candidate has reached the window's min (the "don't wait any
+    longer" cutoff) - at that point *every* current candidate is included, not just
+    the one that triggered it, so as many medications as possible get batched into
+    the same pharmacy trip. Recomputed on every relevant change (intake, restock,
+    medication add/edit/removal, patient window edit) plus a midnight/restart safety
+    sweep, so it never sits stale. The "testo" attribute is a ready-to-send summary
+    for a notify.* automation.
     """
 
     _attr_has_entity_name = True
@@ -196,54 +194,39 @@ class RestockReminderSensor(SensorEntity):
         return patient_hub_device_info(patient) if patient else None
 
     def _candidate_medications(self) -> dict[str, float]:
-        """Medications currently inside the reorder window, mapped to days-remaining."""
+        """Medications at or below the reorder window's max, mapped to days-remaining.
+
+        No lower bound: a medication that's more overdue than the window's min is
+        still a candidate (and still swept into the batch), it just no longer needs
+        to be the one that *triggers* the report.
+        """
         patient = self._store.patients.get(self._patient_id)
         if patient is None:
             return {}
         candidates: dict[str, float] = {}
         for medication in self._store.list_medications(patient_id=self._patient_id):
             remaining = medication.days_remaining()
-            if (
-                remaining is not None
-                and patient.restock_window_min_days <= remaining <= patient.restock_window_max_days
-            ):
+            if remaining is not None and remaining <= patient.restock_window_max_days:
                 candidates[medication.id] = remaining
         return candidates
 
     @callback
     def _async_recompute_decision(self) -> None:
-        """Decide whether *today* is the day to report, and which medications to include.
+        """Decide whether to report, and which medications to include.
 
-        A medication is reported once: either the first time it enters the window (so
-        you know about it while it's still safe to wait), or - always - once it becomes
-        the urgent one forcing a report (so nothing is ever silently missed). Medications
-        already reported earlier and still just waiting (not yet urgent again) are not
-        repeated in every subsequent batch.
+        Nothing is reported until at least one candidate reaches the window's min
+        (the "don't wait any longer" cutoff) - at that point every current candidate
+        is included, not just the one that triggered it, to batch as many medications
+        as possible into the same pharmacy trip.
         """
         patient = self._store.patients.get(self._patient_id)
         candidates = self._candidate_medications()
         if not candidates or patient is None:
             self._decided_ids = set()
-            if patient is not None and patient.restock_reported_ids:
-                self.hass.async_create_task(
-                    self._store.async_set_restock_reported_ids(patient.id, [])
-                )
             return
 
-        previously_reported = set(patient.restock_reported_ids) & set(candidates)
-        new_ids = set(candidates) - previously_reported
-        forced_ids = {
-            medication_id
-            for medication_id, remaining in candidates.items()
-            if remaining <= patient.restock_window_min_days
-        }
-        self._decided_ids = new_ids | forced_ids
-
-        updated_reported = previously_reported | self._decided_ids
-        if updated_reported != set(patient.restock_reported_ids):
-            self.hass.async_create_task(
-                self._store.async_set_restock_reported_ids(patient.id, sorted(updated_reported))
-            )
+        triggered = any(remaining <= patient.restock_window_min_days for remaining in candidates.values())
+        self._decided_ids = set(candidates) if triggered else set()
 
     def _decided_medications(self) -> list[Medication]:
         return [
@@ -293,11 +276,9 @@ class RestockReminderSensor(SensorEntity):
             SIGNAL_RESTOCK_RECORDED,
             SIGNAL_MEDICATION_ADDED,
             SIGNAL_MEDICATION_UPDATED,
+            SIGNAL_MEDICATION_REMOVED,
         ):
-            self.async_on_remove(async_dispatcher_connect(self.hass, signal, self._handle_refresh))
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_MEDICATION_REMOVED, self._handle_medication_removed)
-        )
+            self.async_on_remove(async_dispatcher_connect(self.hass, signal, self._handle_recompute))
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_PATIENT_UPDATED, self._handle_patient_updated)
         )
@@ -306,21 +287,16 @@ class RestockReminderSensor(SensorEntity):
         )
 
     @callback
-    def _handle_refresh(self, *_args) -> None:
-        """Live data (stock, days-remaining) for already-decided medications may change,
-        but which medications are decided is only recomputed at midnight/restart."""
-        self.async_write_ha_state()
-
-    @callback
-    def _handle_medication_removed(self, medication_id: str) -> None:
-        self._decided_ids.discard(medication_id)
+    def _handle_recompute(self, *_args) -> None:
+        """Any change to stock, doses or medications can change who's a candidate
+        or who triggers the report, so recompute on every one of these signals
+        instead of only at midnight - keeps the sensor from ever sitting stale."""
+        self._async_recompute_decision()
         self.async_write_ha_state()
 
     @callback
     def _handle_patient_updated(self, patient: Patient) -> None:
         if patient.id == self._patient_id:
-            # The reorder window itself may have just changed - reflect that now
-            # rather than waiting for the next midnight recompute.
             self._async_recompute_decision()
             self.async_write_ha_state()
 

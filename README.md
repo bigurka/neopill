@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.14.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.14.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -55,11 +55,11 @@ paziente e un dispositivo HA per ogni farmaco.
 - **Finestra ideale di riordino, per paziente**: due soglie (giorni minimi/massimi, editabili dalla toolbar
   del pannello) pensate per raggruppare più farmaci possibile in un'unica commissione — minimi = non
   aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di rifiuto del medico
-  per prescrizione anticipata). Il sensore per paziente `sensor.‹slug›_restock_reminder` è "intelligente":
-  non segnala un farmaco ogni giorno per tutta l'ampiezza della finestra, ma aspetta il momento giusto per
-  raggrupparne il più possibile in un solo ordine, e non ripete un farmaco già segnalato finché non torna
-  davvero urgente (vedi [Blueprint pronte all'uso](#blueprint-pronte-alluso) per i dettagli e come
-  collegarlo a una notifica/email).
+  per prescrizione anticipata). Il sensore per paziente `sensor.‹slug›_restock_reminder` non segnala nulla
+  finché nessun farmaco ha raggiunto il minimo; nel momento in cui il primo lo raggiunge, include **tutti**
+  i farmaci attualmente nella finestra (non solo quello che ha fatto scattare l'avviso), per riunirli nello
+  stesso ordine (vedi [Blueprint pronte all'uso](#blueprint-pronte-alluso) per i dettagli e come collegarlo
+  a una notifica/email).
 - Ogni card farmaco nel pannello mostra anche il contenuto della confezione e la data di esaurimento
   scorta prevista; le azioni quotidiane (assumi, segna non assunta, modifica, rifornisci) sono pulsanti a
   icona (la pillola a due colori del logo, con un badge overlay) invece che testo.
@@ -183,13 +183,15 @@ campo dove va il testo del messaggio, in modalità YAML, usa i modelli:
 
 ### Come funziona il sensore di rifornimento (`restock_reminder`)
 
-Il sensore **non** segnala un farmaco ogni giorno per tutta l'ampiezza della finestra di riordino, e non
-ripete un farmaco già segnalato in ogni email successiva. Un farmaco viene incluso nel testo/notifica in
-due soli casi: la prima volta che entra nella finestra (così sai che esiste, mentre si aspetta che magari
-altri lo raggiungano per lo stesso ordine), oppure — sempre, senza eccezioni — nel momento in cui diventa
-il più urgente (sta per scendere sotto il minimo), così non viene mai perso. Il ricalcolo della decisione
-avviene a mezzanotte, al riavvio di Home Assistant, o subito se modifichi i giorni Min/Max dalla toolbar
-del pannello.
+Un farmaco è "candidato" quando i suoi giorni di scorta rimanenti scendono al di sotto della soglia
+massima della finestra (nessun limite inferiore: un farmaco può restare candidato anche ben oltre la
+soglia minima, se non lo rifornisci). Il sensore però **non segnala nulla finché nessun candidato ha
+raggiunto la soglia minima** — niente avvisi anticipati sul primo farmaco che entra in finestra da solo.
+Nel momento in cui il primo candidato raggiunge il minimo, il sensore include **tutti** i farmaci
+attualmente candidati (non solo quello che ha fatto scattare l'avviso), per riunire il più possibile in
+un solo ordine. Il ricalcolo avviene a ogni assunzione, rifornimento, modifica farmaco, modifica delle
+soglie Min/Max, oltre alla consueta verifica a mezzanotte/riavvio — quindi il sensore riflette sempre la
+situazione attuale, senza bisogno di forzare nulla.
 
 L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, giorni rimanenti, scorta, data
 di esaurimento prevista) se preferisci costruire un messaggio personalizzato invece di usare il testo già
@@ -230,7 +232,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.14.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.14.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, due blueprint HA pronte all'uso per i promemoria di assunzione e rifornimento, e una card
@@ -266,7 +268,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.14.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.14.1, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -298,11 +300,10 @@ patient and an HA device for each medication.
 - **Per-patient ideal reorder window**: two thresholds (min/max days, editable from the panel toolbar)
   meant to help you batch as many medications as possible into a single pharmacy trip — min = don't leave
   it any later (risk of running out), max = don't order too early (risk of the prescription being refused
-  as premature). The per-patient sensor `sensor.‹slug›_restock_reminder` is "smart": it doesn't flag a
-  medication every day for the whole width of the window, it waits for the right moment to batch as many
-  as possible into one order, and never repeats an already-flagged medication until it's genuinely urgent
-  again (see [Ready-made blueprints](#ready-made-blueprints) for details and how to wire it to a
-  notification/email).
+  as premature). The per-patient sensor `sensor.‹slug›_restock_reminder` stays silent until at least one
+  medication reaches the minimum; at that point it reports **every** medication currently in the window
+  at once (not just the one that triggered it), to batch as many as possible into the same order (see
+  [Ready-made blueprints](#ready-made-blueprints) for details and how to wire it to a notification/email).
 - Each medication tile in the panel also shows the package content and the predicted stock-depletion date;
   the everyday actions (take dose, mark as missed, edit, restock) are icon buttons (the two-tone pill from
   the logo, with a small badge overlay) instead of text.
@@ -423,13 +424,14 @@ text, in YAML mode, use these templates:
 
 ### How the restock sensor (`restock_reminder`) works
 
-The sensor does **not** flag a medication every day for the whole width of the reorder window, and it
-doesn't repeat an already-flagged medication in every following email. A medication is included in the
-text/notification in exactly two cases: the first time it enters the window (so you know it exists, while
-waiting for others to possibly join the same order), or - always, without exception - the moment it
-becomes the most urgent one (about to drop below the minimum), so it's never silently missed. The decision
-is recomputed at midnight, on Home Assistant restart, or immediately if you change the Min/Max days from
-the panel toolbar.
+A medication is a "candidate" once its days remaining drop at or below the reorder window's max - no lower
+bound, so it stays a candidate even if it later drops well past the min without being restocked. The sensor
+stays silent until at least one candidate reaches the window's min - no early heads-up for a single
+medication that just entered the window on its own. The moment the first one hits the min, the sensor
+reports **every** current candidate at once (not just the one that triggered it), to batch as many as
+possible into the same order. It's recomputed on every intake, restock, medication edit, or Min/Max change,
+plus the usual midnight/restart safety check - so it always reflects the current situation, no forcing a
+refresh needed.
 
 The sensor's `farmaci` attribute also holds the structured list (name, days remaining, stock, predicted
 depletion date) if you'd rather build a custom message instead of using the ready-made `testo` text. If you
@@ -470,7 +472,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.14.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.14.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, two ready-made
 HA blueprints for dose and restock reminders, and a Lovelace card plus an auto-generated per-patient
