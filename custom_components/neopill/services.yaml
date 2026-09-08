@@ -59,3 +59,33 @@ rifornisci_farmaco:
           min: 0
           step: 1
           mode: box
+
+segna_rifornimento_notificato:
+  name: Segna rifornimento notificato
+  description: >-
+    Dichiara che è già stato notificato l'utente di uno o più farmaci da
+    rifornire, così i loro attributi "da_notificare" (sul binary_sensor
+    "low_stock" del farmaco, e in forma aggregata sul sensore
+    "restock_reminder" del paziente) tornano a false finché la situazione
+    non cambia. Passa "medication_id" per confermare un singolo farmaco
+    (es. dopo un rifornimento parziale), oppure "patient_id" per confermarli
+    tutti insieme per quel paziente. Da chiamare dalle proprie automazioni
+    subito dopo aver notificato l'utente.
+  fields:
+    medication_id:
+      name: Farmaco
+      description: >-
+        ID del farmaco da confermare da solo. Alternativa a "patient_id".
+      required: false
+      selector:
+        text:
+    patient_id:
+      name: Paziente
+      description: >-
+        ID del paziente: conferma tutti i suoi farmaci attualmente da
+        notificare. Alternativa a "medication_id". ID disponibile
+        nell'attributo "patient_id" del sensore restock_reminder, o come
+        "medication_id" di ogni voce nel suo attributo "farmaci".
+      required: false
+      selector:
+        text:

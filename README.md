@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.14.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.15.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -66,9 +66,9 @@ paziente e un dispositivo HA per ogni farmaco.
 - Tutta la gestione (pazienti, farmaci, assunzioni, rifornimenti) avviene da un pannello dedicato nella
   sidebar di Home Assistant, separato da Lovelace: i farmaci del paziente selezionato sono mostrati come
   tile in griglia, non come un semplice elenco.
-- Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`)
-  per l'uso da automazioni, e due [blueprint](#blueprint-pronte-alluso) pronte all'uso per i promemoria di
-  assunzione e di rifornimento.
+- Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`,
+  `neopill.segna_rifornimento_notificato`) per l'uso da automazioni, e due [blueprint](#blueprint-pronte-alluso)
+  pronte all'uso per i promemoria di assunzione e di rifornimento.
 - **Fasce orarie a colori**: una legenda nella parte alta del pannello mostra un colore per ogni orario di
   assunzione in uso; lo stesso colore tinteggia le righe corrispondenti nello storico, per riconoscere a
   colpo d'occhio assunzioni fuori orario o mancate.
@@ -197,6 +197,25 @@ L'attributo `farmaci` del sensore contiene anche la lista strutturata (nome, gio
 di esaurimento prevista) se preferisci costruire un messaggio personalizzato invece di usare il testo già
 pronto in `testo`. Se hai più pazienti, importa la blueprint una volta per ciascun sensore/paziente.
 
+#### Evitare notifiche ripetute per lo stesso gruppo (`da_notificare`)
+
+Il sensore `restock_reminder` da solo non basta per un'automazione che gira ogni giorno: se non rifornisci
+nulla, la situazione resta identica e riceveresti la stessa notifica ogni giorno. Per questo ogni farmaco
+ha un proprio attributo `da_notificare` (true/false) sul suo `binary_sensor.‹slug›_‹farmaco›_low_stock`,
+e il sensore `restock_reminder` ne espone la versione aggregata (true se almeno un farmaco del gruppo lo
+ha ancora true).
+
+- Si accende automaticamente quando il farmaco entra nel gruppo dei "da rifornire" (vedi sopra).
+- Si spegne **solo** quando lo dichiari tu, con il nuovo servizio `neopill.segna_rifornimento_notificato`
+  — passa `medication_id` per confermare un solo farmaco (utile se rifornisci parzialmente il gruppo,
+  senza toccare gli altri ancora in attesa), oppure `patient_id` per confermarli tutti insieme.
+- Si azzera da solo quando il farmaco esce dal gruppo (rifornito, o il gruppo non è più attivo), così una
+  futura ricomparsa riparte come segnalazione nuova.
+
+La blueprint email qui sotto usa già questo attributo al posto dello stato grezzo del sensore, e chiama il
+servizio subito dopo aver inviato la notifica — la logica è già pronta all'uso, questi dettagli servono
+solo se vuoi costruire una tua automazione personalizzata.
+
 ## Permessi
 
 Qualsiasi utente Home Assistant autenticato può registrare un'assunzione, una dose "non assunta" o un
@@ -232,7 +251,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.14.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.15.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, due blueprint HA pronte all'uso per i promemoria di assunzione e rifornimento, e una card
@@ -268,7 +287,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.14.1, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.15.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -311,8 +330,8 @@ patient and an HA device for each medication.
   Assistant sidebar, separate from Lovelace: the selected patient's medications are shown as tiles in a
   grid, not a plain list.
 - Home Assistant services (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`,
-  `neopill.rifornisci_farmaco`) for use in automations, plus two [ready-made
-  blueprints](#ready-made-blueprints) for dose and restock reminders.
+  `neopill.rifornisci_farmaco`, `neopill.segna_rifornimento_notificato`) for use in automations, plus two
+  [ready-made blueprints](#ready-made-blueprints) for dose and restock reminders.
 - **Color-coded time slots**: a legend at the top of the panel shows one color per dose time in use;
   the same color tints the matching rows in the history table, so off-schedule or missed doses stand out
   at a glance.
@@ -437,6 +456,25 @@ The sensor's `farmaci` attribute also holds the structured list (name, days rema
 depletion date) if you'd rather build a custom message instead of using the ready-made `testo` text. If you
 have more than one patient, import the blueprint once per sensor/patient.
 
+#### Avoiding repeat notifications for the same group (`da_notificare`)
+
+The `restock_reminder` sensor alone isn't enough for a daily automation: if nothing gets restocked, the
+situation stays identical and you'd get the same notification every day. That's why every medication has
+its own `da_notificare` attribute (true/false) on its `binary_sensor.‹slug›_‹medication›_low_stock`, and
+the `restock_reminder` sensor exposes the aggregate (true if at least one medication in the group still
+has it true).
+
+- Turns on automatically when the medication enters the "needs restock" group (see above).
+- Turns off **only** when you say so, via the new `neopill.segna_rifornimento_notificato` service - pass
+  `medication_id` to acknowledge just one medication (handy if you only partially restock the group,
+  leaving others still pending), or `patient_id` to acknowledge all of them at once.
+- Resets itself once the medication leaves the group (restocked, or the group is no longer active), so a
+  future recurrence starts as a fresh notification.
+
+The email blueprint below already uses this attribute instead of the sensor's raw state, and calls the
+service right after sending the notification - this is ready to use as-is, these details only matter if
+you're building your own custom automation.
+
 ## Permissions
 
 Any authenticated Home Assistant user can record an intake, a "missed" dose, or a restock (from the panel,
@@ -472,7 +510,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.14.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.15.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, two ready-made
 HA blueprints for dose and restock reminders, and a Lovelace card plus an auto-generated per-patient

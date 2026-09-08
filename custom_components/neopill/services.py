@@ -17,10 +17,12 @@ from .runtime import get_runtime_data
 SERVICE_ASSUMI_FARMACO = "assumi_farmaco"
 SERVICE_SEGNA_NON_ASSUNTA = "segna_non_assunta"
 SERVICE_RIFORNISCI_FARMACO = "rifornisci_farmaco"
+SERVICE_SEGNA_RIFORNIMENTO_NOTIFICATO = "segna_rifornimento_notificato"
 
 ATTR_MEDICATION_ID = "medication_id"
 ATTR_AMOUNT = "amount"
 ATTR_PACKAGES = "packages"
+ATTR_PATIENT_ID = "patient_id"
 
 _TAKE_SCHEMA = vol.Schema(
     {
@@ -35,6 +37,15 @@ _RESTOCK_SCHEMA = vol.Schema(
         vol.Optional(ATTR_AMOUNT): vol.Coerce(float),
         vol.Optional(ATTR_PACKAGES): vol.Coerce(float),
     }
+)
+_RESTOCK_NOTIFIED_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional(ATTR_MEDICATION_ID): cv.string,
+            vol.Optional(ATTR_PATIENT_ID): cv.string,
+        }
+    ),
+    cv.has_at_least_one_key(ATTR_MEDICATION_ID, ATTR_PATIENT_ID),
 )
 
 
@@ -61,6 +72,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
             packages=call.data.get(ATTR_PACKAGES),
         )
 
+    async def _handle_restock_notified(call: ServiceCall) -> None:
+        runtime = get_runtime_data(hass)
+        medication_id = call.data.get(ATTR_MEDICATION_ID)
+        if medication_id:
+            await runtime.store.async_set_restock_notify_pending(medication_id, False)
+            return
+        for medication in runtime.store.list_medications(patient_id=call.data[ATTR_PATIENT_ID]):
+            if medication.restock_notify_pending:
+                await runtime.store.async_set_restock_notify_pending(medication.id, False)
+
     hass.services.async_register(DOMAIN, SERVICE_ASSUMI_FARMACO, _handle_take, schema=_TAKE_SCHEMA)
     hass.services.async_register(
         DOMAIN, SERVICE_SEGNA_NON_ASSUNTA, _handle_missed, schema=_MISSED_SCHEMA
@@ -68,9 +89,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_RIFORNISCI_FARMACO, _handle_restock, schema=_RESTOCK_SCHEMA
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEGNA_RIFORNIMENTO_NOTIFICATO,
+        _handle_restock_notified,
+        schema=_RESTOCK_NOTIFIED_SCHEMA,
+    )
 
 
 def async_unload_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_ASSUMI_FARMACO)
     hass.services.async_remove(DOMAIN, SERVICE_SEGNA_NON_ASSUNTA)
     hass.services.async_remove(DOMAIN, SERVICE_RIFORNISCI_FARMACO)
+    hass.services.async_remove(DOMAIN, SERVICE_SEGNA_RIFORNIMENTO_NOTIFICATO)

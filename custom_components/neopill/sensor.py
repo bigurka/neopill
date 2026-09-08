@@ -21,6 +21,7 @@ from .const import (
     SIGNAL_MEDICATION_UPDATED,
     SIGNAL_PATIENT_ADDED,
     SIGNAL_PATIENT_UPDATED,
+    SIGNAL_RESTOCK_NOTIFY_CHANGED,
     SIGNAL_RESTOCK_RECORDED,
 )
 from .entity import NeoPillMedicationEntity, patient_hub_device_info
@@ -167,6 +168,14 @@ class RestockReminderSensor(SensorEntity):
     medication add/edit/removal, patient window edit) plus a midnight/restart safety
     sweep, so it never sits stale. The "testo" attribute is a ready-to-send summary
     for a notify.* automation.
+
+    The "already notified" bookkeeping lives per medication (see
+    Medication.restock_notify_pending), not on this sensor: whenever a medication
+    newly joins the batch, its own flag is raised; it's only lowered again by an
+    automation (via the neopill.segna_rifornimento_notificato service) or by the
+    medication leaving the batch. This sensor's own "da_notificare" attribute is
+    just the OR of its currently-decided medications' flags, so a partial restock
+    (acknowledging one medication while another stays pending) behaves correctly.
     """
 
     _attr_has_entity_name = True
@@ -212,21 +221,38 @@ class RestockReminderSensor(SensorEntity):
 
     @callback
     def _async_recompute_decision(self) -> None:
-        """Decide whether to report, and which medications to include.
+        """Decide whether to report, which medications to include, and raise/clear
+        each one's own restock_notify_pending flag on the transitions.
 
         Nothing is reported until at least one candidate reaches the window's min
         (the "don't wait any longer" cutoff) - at that point every current candidate
         is included, not just the one that triggered it, to batch as many medications
-        as possible into the same pharmacy trip.
+        as possible into the same pharmacy trip. A medication *newly* entering this
+        batch (compared to Patient.restock_previous_decided_ids, persisted so a
+        restart doesn't look like a fresh entry) has its notify flag raised; one
+        newly *leaving* it has the flag cleared, ready for a future fresh occurrence.
+        A medication that stays in the batch across recomputes is left untouched, so
+        an automation's acknowledgement (clearing the flag) isn't undone the moment
+        anything else changes while it's still pending.
         """
         patient = self._store.patients.get(self._patient_id)
         candidates = self._candidate_medications()
-        if not candidates or patient is None:
-            self._decided_ids = set()
-            return
-
-        triggered = any(remaining <= patient.restock_window_min_days for remaining in candidates.values())
+        triggered = patient is not None and any(
+            remaining <= patient.restock_window_min_days for remaining in candidates.values()
+        )
         self._decided_ids = set(candidates) if triggered else set()
+
+        if patient is None:
+            return
+        previous_decided = set(patient.restock_previous_decided_ids)
+        for medication_id in self._decided_ids - previous_decided:
+            self.hass.async_create_task(self._store.async_set_restock_notify_pending(medication_id, True))
+        for medication_id in previous_decided - self._decided_ids:
+            self.hass.async_create_task(self._store.async_set_restock_notify_pending(medication_id, False))
+        if self._decided_ids != previous_decided:
+            self.hass.async_create_task(
+                self._store.async_set_restock_previous_decided(patient.id, sorted(self._decided_ids))
+            )
 
     def _decided_medications(self) -> list[Medication]:
         return [
@@ -267,7 +293,13 @@ class RestockReminderSensor(SensorEntity):
             if lines
             else f"Nessun farmaco da rifornire nella finestra {window_min}-{window_max} giorni."
         )
-        return {"farmaci": items, "testo": testo}
+        da_notificare = any(m.restock_notify_pending for m in medications)
+        return {
+            "farmaci": items,
+            "testo": testo,
+            "patient_id": self._patient_id,
+            "da_notificare": da_notificare,
+        }
 
     async def async_added_to_hass(self) -> None:
         self._async_recompute_decision()
@@ -281,6 +313,9 @@ class RestockReminderSensor(SensorEntity):
             self.async_on_remove(async_dispatcher_connect(self.hass, signal, self._handle_recompute))
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_PATIENT_UPDATED, self._handle_patient_updated)
+        )
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_RESTOCK_NOTIFY_CHANGED, self._handle_notify_changed)
         )
         self.async_on_remove(
             async_track_time_change(self.hass, self._handle_midnight, hour=0, minute=0, second=30)
@@ -298,6 +333,15 @@ class RestockReminderSensor(SensorEntity):
     def _handle_patient_updated(self, patient: Patient) -> None:
         if patient.id == self._patient_id:
             self._async_recompute_decision()
+            self.async_write_ha_state()
+
+    @callback
+    def _handle_notify_changed(self, medication_id: str) -> None:
+        """A medication's restock_notify_pending flag changed (raised by our own
+        recompute, or cleared by an automation via the service) - refresh the
+        aggregate "da_notificare" attribute, which is just the OR of all our
+        currently-decided medications' flags."""
+        if medication_id in self._decided_ids:
             self.async_write_ha_state()
 
     @callback

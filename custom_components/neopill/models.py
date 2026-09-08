@@ -108,6 +108,14 @@ class Patient:
     # cutoff. min must stay < max (enforced in storage.async_update_patient).
     restock_window_min_days: int = DEFAULT_RESTOCK_WINDOW_MIN_DAYS
     restock_window_max_days: int = DEFAULT_RESTOCK_WINDOW_MAX_DAYS
+    # Medication ids that were part of the "decided" restock batch as of the last
+    # recompute - internal bookkeeping only (not exposed anywhere), lets
+    # RestockReminderSensor tell a medication *newly entering* the batch (which
+    # should raise its own restock_notify_pending flag) from one that's merely
+    # continuing in it (which must NOT have an already-acknowledged flag reset back
+    # to pending on every recompute). Persisted so a restart doesn't look like every
+    # medication just freshly joined.
+    restock_previous_decided_ids: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +124,7 @@ class Patient:
             "slug": self.slug,
             "restock_window_min_days": self.restock_window_min_days,
             "restock_window_max_days": self.restock_window_max_days,
+            "restock_previous_decided_ids": self.restock_previous_decided_ids,
         }
 
     @classmethod
@@ -130,6 +139,7 @@ class Patient:
             restock_window_max_days=data.get(
                 "restock_window_max_days", DEFAULT_RESTOCK_WINDOW_MAX_DAYS
             ),
+            restock_previous_decided_ids=list(data.get("restock_previous_decided_ids", [])),
         )
 
 
@@ -147,6 +157,15 @@ class Medication:
     # 40/12,5mg"), distinct from the short `name` used for the device/entities
     # (e.g. "Olmesartan"). Optional - falls back to `name` where used.
     full_name: str = ""
+    # True while this medication is part of its patient's current restock batch and
+    # no automation has yet acknowledged notifying about it (via the
+    # neopill.segna_rifornimento_notificato service). Raised automatically by
+    # RestockReminderSensor when the medication newly joins the batch; only an
+    # explicit service call - or the medication leaving the batch - clears it, so a
+    # recompute while it's still pending can't silently re-arm an already-handled
+    # notification. Exposed as the "da_notificare" attribute on this medication's
+    # low_stock binary sensor.
+    restock_notify_pending: bool = False
     id: str = field(default_factory=new_id)
 
     def display_name(self) -> str:
@@ -187,6 +206,7 @@ class Medication:
             "dose_schedule": self.dose_schedule.as_dict(),
             "notes": self.notes,
             "full_name": self.full_name,
+            "restock_notify_pending": self.restock_notify_pending,
         }
 
     @classmethod
@@ -204,6 +224,7 @@ class Medication:
             ),
             dose_schedule=DoseSchedule.from_dict(data.get("dose_schedule", {})),
             notes=data.get("notes", ""),
+            restock_notify_pending=bool(data.get("restock_notify_pending", False)),
         )
 
 

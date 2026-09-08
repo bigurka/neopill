@@ -11,7 +11,10 @@ blueprint:
     disponibile in Home Assistant coi suoi campi specifici - parte solo
     alla conferma esplicita. Con "Richiedi conferma" disattivato, la
     notifica resta solo informativa e l'email parte subito, in automatico
-    (comodo quando ormai serve solo per passare in farmacia).
+    (comodo quando ormai serve solo per passare in farmacia). Non ripete la
+    notifica ogni giorno per lo stesso gruppo di farmaci già segnalato: si
+    riattiva solo se il gruppo cambia (nuovo farmaco, o uno rifornito) o se
+    torna a zero e poi si ripresenta.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_restock_email.yaml
@@ -100,7 +103,7 @@ trigger:
 
 condition:
   - condition: template
-    value_template: "{{ states(restock_sensor) not in ['0', 'unknown', 'unavailable'] }}"
+    value_template: "{{ state_attr(restock_sensor, 'da_notificare') | default(false) }}"
 
 variables:
   restock_sensor: !input restock_sensor
@@ -109,6 +112,7 @@ variables:
   recipient_name: !input recipient_name
   sender_name: !input sender_name
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
+  patient_id: "{{ state_attr(restock_sensor, 'patient_id') }}"
 
 action:
   - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
@@ -123,6 +127,9 @@ action:
                {'action': 'NEOPILL_INVIA_EMAIL_' ~ context.id, 'title': 'Invia email'},
                {'action': 'NEOPILL_ANNULLA_' ~ context.id, 'title': 'Annulla'},
              ] if require_confirmation else [] }}
+  - action: neopill.segna_rifornimento_notificato
+    data:
+      patient_id: "{{ patient_id }}"
   - if:
       - condition: template
         value_template: "{{ require_confirmation }}"

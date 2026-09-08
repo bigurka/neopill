@@ -32,6 +32,7 @@ from .const import (
     SIGNAL_PATIENT_ADDED,
     SIGNAL_PATIENT_REMOVED,
     SIGNAL_PATIENT_UPDATED,
+    SIGNAL_RESTOCK_NOTIFY_CHANGED,
     SIGNAL_RESTOCK_RECORDED,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -124,6 +125,13 @@ class NeoPillStore:
         async_dispatcher_send(self._hass, SIGNAL_PATIENT_UPDATED, patient)
         return patient
 
+    async def async_set_restock_previous_decided(self, patient_id: str, medication_ids: list[str]) -> None:
+        """Internal bookkeeping for RestockReminderSensor - not user-facing config,
+        so this skips validation/SIGNAL_PATIENT_UPDATED and just persists (debounced)."""
+        patient = self.get_patient(patient_id)
+        patient.restock_previous_decided_ids = medication_ids
+        self._async_delay_save()
+
     async def async_delete_patient(self, patient_id: str) -> None:
         self.get_patient(patient_id)
         for medication in self.list_medications(patient_id=patient_id):
@@ -193,6 +201,23 @@ class NeoPillStore:
         await self._async_save()
         async_dispatcher_send(self._hass, SIGNAL_MEDICATION_UPDATED, medication)
         return medication
+
+    async def async_set_restock_notify_pending(self, medication_id: str, pending: bool) -> None:
+        """Set/clear one medication's "needs restock notification" flag.
+
+        Raised automatically by RestockReminderSensor when the medication newly
+        enters its patient's restock batch; cleared either the same way when it
+        leaves the batch, or explicitly by an automation via the
+        neopill.segna_rifornimento_notificato service. Not user-facing config, so
+        this skips SIGNAL_MEDICATION_UPDATED (which the scheduler also listens to)
+        in favor of a dedicated signal only the relevant sensors react to.
+        """
+        medication = self.get_medication(medication_id)
+        if medication.restock_notify_pending == pending:
+            return
+        medication.restock_notify_pending = pending
+        self._async_delay_save()
+        async_dispatcher_send(self._hass, SIGNAL_RESTOCK_NOTIFY_CHANGED, medication_id)
 
     async def async_delete_medication(self, medication_id: str) -> None:
         self.get_medication(medication_id)

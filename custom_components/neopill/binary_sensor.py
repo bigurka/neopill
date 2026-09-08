@@ -12,6 +12,7 @@ from .const import (
     SIGNAL_DOSE_DUE_CHANGED,
     SIGNAL_INTAKE_RECORDED,
     SIGNAL_MEDICATION_ADDED,
+    SIGNAL_RESTOCK_NOTIFY_CHANGED,
     SIGNAL_RESTOCK_RECORDED,
 )
 from .entity import NeoPillMedicationEntity
@@ -97,6 +98,16 @@ class LowStockBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
         medication = self.medication
         return medication.is_low_stock() if medication else False
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """"da_notificare": true while this medication is part of its patient's
+        current restock batch (see RestockReminderSensor) and no automation has yet
+        acknowledged it via the neopill.segna_rifornimento_notificato service."""
+        medication = self.medication
+        if medication is None:
+            return None
+        return {"da_notificare": medication.restock_notify_pending}
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(
@@ -105,8 +116,16 @@ class LowStockBinarySensor(NeoPillMedicationEntity, BinarySensorEntity):
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_RESTOCK_RECORDED, self._handle_event)
         )
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_RESTOCK_NOTIFY_CHANGED, self._handle_notify_changed)
+        )
 
     @callback
     def _handle_event(self, event: IntakeEvent | RestockEvent) -> None:
         if event.medication_id == self._medication_id:
+            self.async_write_ha_state()
+
+    @callback
+    def _handle_notify_changed(self, medication_id: str) -> None:
+        if medication_id == self._medication_id:
             self.async_write_ha_state()
