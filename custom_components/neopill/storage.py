@@ -22,6 +22,7 @@ from .const import (
     CALENDAR_EVENT_TAKEN,
     CALENDAR_EVENT_UNANSWERED,
     DEFAULT_LOW_STOCK_DAYS_THRESHOLD,
+    EVENT_STOCK_DEPLETED,
     INTAKE_STATUS_MISSED,
     INTAKE_STATUS_TAKEN,
     INTAKE_STATUS_UNANSWERED,
@@ -50,6 +51,10 @@ class PatientNotFoundError(KeyError):
 
 class MedicationNotFoundError(KeyError):
     """Raised when a medication id does not exist."""
+
+
+class IntakeEventNotFoundError(KeyError):
+    """Raised when an intake event id does not exist."""
 
 
 class NeoPillStore:
@@ -266,6 +271,42 @@ class NeoPillStore:
         )
         self.intake_events.append(event)
         self._async_delay_save()
+        async_dispatcher_send(self._hass, SIGNAL_INTAKE_RECORDED, event)
+        if event.depleted:
+            self._hass.bus.async_fire(
+                EVENT_STOCK_DEPLETED,
+                {
+                    "event_id": event.id,
+                    "medication_id": medication_id,
+                    "medication_name": medication.display_name(),
+                    "patient_id": medication.patient_id,
+                },
+            )
+        return event
+
+    def get_intake_event(self, event_id: str) -> IntakeEvent:
+        for event in self.intake_events:
+            if event.id == event_id:
+                return event
+        raise IntakeEventNotFoundError(event_id)
+
+    async def async_correct_taken_to_missed(self, event_id: str) -> IntakeEvent:
+        """Undo a mistaken "taken" record - restores the stock it consumed and turns
+        the calendar entry into "missed" instead. Meant for the case where a bulk
+        "take all" action swept in a medication that was already out of stock and
+        couldn't be deselected beforehand (see the neopill_stock_depleted_notice
+        blueprint). A no-op if the event isn't currently "taken" (e.g. already
+        corrected once)."""
+        event = self.get_intake_event(event_id)
+        if event.status != INTAKE_STATUS_TAKEN:
+            return event
+        medication = self.medications.get(event.medication_id)
+        if medication is not None:
+            medication.stock_quantity += event.amount
+        event.status = INTAKE_STATUS_MISSED
+        event.amount = 0.0
+        event.depleted = False
+        await self._async_save()
         async_dispatcher_send(self._hass, SIGNAL_INTAKE_RECORDED, event)
         return event
 
