@@ -34,3 +34,8 @@ async def async_restock(
 ) -> RestockEvent:
     """Record a restock, either as a direct quantity or as a number of packages."""
     return await store.async_record_restock(medication_id, amount=amount, packages=packages)
+
+
+async def async_correct_taken_to_missed(store: NeoPillStore, event_id: str) -> IntakeEvent:
+    """Undo a mistaken "taken" record, restoring stock and marking it missed instead."""
+    return await store.async_correct_taken_to_missed(event_id)

@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.15.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.16.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -67,8 +67,9 @@ paziente e un dispositivo HA per ogni farmaco.
   sidebar di Home Assistant, separato da Lovelace: i farmaci del paziente selezionato sono mostrati come
   tile in griglia, non come un semplice elenco.
 - Servizi Home Assistant (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`, `neopill.rifornisci_farmaco`,
-  `neopill.segna_rifornimento_notificato`) per l'uso da automazioni, e due [blueprint](#blueprint-pronte-alluso)
-  pronte all'uso per i promemoria di assunzione e di rifornimento.
+  `neopill.segna_rifornimento_notificato`, `neopill.correggi_assunzione`) per l'uso da automazioni, e tre
+  [blueprint](#blueprint-pronte-alluso) pronte all'uso per i promemoria di assunzione, di rifornimento e per
+  correggere un'assunzione registrata per errore con scorta a zero.
 - **Fasce orarie a colori**: una legenda nella parte alta del pannello mostra un colore per ogni orario di
   assunzione in uso; lo stesso colore tinteggia le righe corrispondenti nello storico, per riconoscere a
   colpo d'occhio assunzioni fuori orario o mancate.
@@ -141,7 +142,7 @@ l'elenco delle viste.
 
 <a id="blueprint-pronte-alluso"></a>
 
-Nel repository, sotto `blueprints/automation/bigurka/`, ci sono due blueprint di automazione Home Assistant
+Nel repository, sotto `blueprints/automation/bigurka/`, ci sono tre blueprint di automazione Home Assistant
 pronte all'uso (nessuna scrittura di YAML richiesta). Per importarle: Impostazioni → Automazioni e scene →
 Blueprint → Importa blueprint, incollando l'URL della pagina GitHub del file, ad esempio:
 `https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
@@ -180,6 +181,16 @@ campo dove va il testo del messaggio, in modalità YAML, usa i modelli:
 - `{{ testo }}` — l'elenco dei farmaci da rifornire, già formattato (una riga per farmaco)
 - `{{ recipient_name }}` — il nome del destinatario, impostato nei campi della blueprint
 - `{{ sender_name }}` — il nome del mittente/firma, impostato nei campi della blueprint
+
+### `neopill_stock_depleted_notice.yaml` — Avviso scorta esaurita durante un'assunzione
+
+Segnare come "assunta" una dose con scorta già a zero non blocca nulla (il sistema si fida dell'azione
+dell'utente), il che diventa scomodo con i pulsanti massivi ("Assumi tutti" per fascia oraria, o quelli
+della card Lovelace) dove non è possibile deselezionare un singolo farmaco prima di confermare. Questa
+blueprint ascolta ogni volta che questo succede e invia una notifica push con un pulsante **"Segna come non
+assunta"**: se premuto, ripristina la scorta scalata e trasforma quella dose in "non assunta" nello
+storico. Un'unica automazione basta per tutti i pazienti e farmaci — non richiede configurazione per
+farmaco, solo il dispositivo a cui notificare.
 
 ### Come funziona il sensore di rifornimento (`restock_reminder`)
 
@@ -251,12 +262,12 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.15.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.16.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
-e nello storico, due blueprint HA pronte all'uso per i promemoria di assunzione e rifornimento, e una card
-Lovelace più una dashboard automatica per paziente (vedi Funzionalità, Card e dashboard Lovelace e
-Blueprint pronte all'uso). Non ancora
+e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
+assunzioni con scorta a zero), e una card Lovelace più una dashboard automatica per paziente (vedi
+Funzionalità, Card e dashboard Lovelace e Blueprint pronte all'uso). Non ancora
 testata a fondo su un uso quotidiano reale prolungato: prima di un uso in produzione, verificare
 l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali (creazione
 paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un ambiente di
@@ -287,7 +298,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.15.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.16.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -330,8 +341,9 @@ patient and an HA device for each medication.
   Assistant sidebar, separate from Lovelace: the selected patient's medications are shown as tiles in a
   grid, not a plain list.
 - Home Assistant services (`neopill.assumi_farmaco`, `neopill.segna_non_assunta`,
-  `neopill.rifornisci_farmaco`, `neopill.segna_rifornimento_notificato`) for use in automations, plus two
-  [ready-made blueprints](#ready-made-blueprints) for dose and restock reminders.
+  `neopill.rifornisci_farmaco`, `neopill.segna_rifornimento_notificato`, `neopill.correggi_assunzione`) for
+  use in automations, plus three [ready-made blueprints](#ready-made-blueprints) for dose reminders, restock
+  reminders, and correcting a mistaken zero-stock intake.
 - **Color-coded time slots**: a legend at the top of the panel shows one color per dose time in use;
   the same color tints the matching rows in the history table, so off-schedule or missed doses stand out
   at a glance.
@@ -401,7 +413,7 @@ deleting a patient from the NeoPill panel, reload the dashboard to refresh the l
 
 <a id="ready-made-blueprints"></a>
 
-The repository ships two ready-to-use Home Assistant automation blueprints under
+The repository ships three ready-to-use Home Assistant automation blueprints under
 `blueprints/automation/bigurka/` (no YAML writing required). To import one: Settings → Automations &
 scenes → Blueprints → Import blueprint, pasting the file's GitHub page URL, e.g.
 `https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
@@ -440,6 +452,15 @@ text, in YAML mode, use these templates:
 - `{{ testo }}` - the list of medications to reorder, already formatted (one line per medication)
 - `{{ recipient_name }}` - the recipient's name, set in the blueprint's own fields
 - `{{ sender_name }}` - the sender/signature name, set in the blueprint's own fields
+
+### `neopill_stock_depleted_notice.yaml` — stock-depleted notice during an intake
+
+Marking a dose "taken" when its stock is already zero doesn't block anything (the system trusts the user's
+action), which becomes awkward with the bulk buttons ("Take all" per time slot, or the ones on the Lovelace
+card) where you can't deselect a single medication before confirming. This blueprint listens for exactly
+that and sends a push notification with a **"Mark as missed"** button: if pressed, it restores the stock
+that was consumed and turns that dose into "missed" in the history. One automation covers every patient and
+medication - no per-medication configuration needed, just the device to notify.
 
 ### How the restock sensor (`restock_reminder`) works
 
@@ -510,11 +531,12 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.15.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.16.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
-repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, two ready-made
-HA blueprints for dose and restock reminders, and a Lovelace card plus an auto-generated per-patient
-dashboard (see Features, Lovelace card & dashboard and Ready-made blueprints). Not yet battle-tested over
+repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
+HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), and a Lovelace card
+plus an auto-generated per-patient dashboard (see Features, Lovelace card & dashboard and Ready-made
+blueprints). Not yet battle-tested over
 extended real-world daily use: before
 relying on it in production, verify the install following [Installation](#installation) and try the main
 flows (creating a patient/medication, taking a dose, restocking, dose reminders, deleting a patient) in a

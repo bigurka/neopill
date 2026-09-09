@@ -1,0 +1,71 @@
+blueprint:
+  name: NeoPill - Avviso scorta esaurita durante un'assunzione
+  description: >-
+    Quando un farmaco viene segnato come "assunta" (anche tramite un pulsante
+    "Assumi tutti", dove non è possibile deselezionare un singolo farmaco
+    prima di confermare) mentre la sua scorta era già a zero, invia una
+    notifica push con un pulsante "Segna come non assunta" per correggere
+    subito l'errore: ripristina la scorta scalata e trasforma quella dose in
+    "non assunta" nello storico.
+  domain: automation
+  author: bigurka
+  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_stock_depleted_notice.yaml
+  input:
+    notify_device:
+      name: Dispositivo per la notifica
+      description: Il dispositivo mobile (app Home Assistant) a cui inviare l'avviso.
+      selector:
+        device:
+          integration: mobile_app
+    correction_timeout_minutes:
+      name: Timeout correzione (minuti)
+      description: >-
+        Dopo quanti minuti senza risposta il pulsante di correzione scade
+        (l'assunzione resta comunque registrata come "assunta").
+      default: 1440
+      selector:
+        number:
+          min: 5
+          max: 10080
+          unit_of_measurement: minuti
+          mode: box
+
+mode: parallel
+max: 10
+
+trigger:
+  - platform: event
+    event_type: neopill_stock_depleted
+
+variables:
+  notify_device: !input notify_device
+  medication_name: "{{ trigger.event.data.medication_name }}"
+  event_id: "{{ trigger.event.data.event_id }}"
+
+action:
+  - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
+    data:
+      title: "Scorta esaurita"
+      message: >-
+        "{{ medication_name }}" è stata segnata come assunta ma la scorta era
+        già a zero. Se non l'hai presa davvero, correggila qui sotto.
+      data:
+        tag: "neopill_depleted_{{ event_id }}"
+        actions:
+          - action: "NEOPILL_CORREGGI_{{ event_id }}"
+            title: "Segna come non assunta"
+  - wait_for_trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "NEOPILL_CORREGGI_{{ event_id }}"
+    timeout:
+      minutes: !input correction_timeout_minutes
+    continue_on_timeout: true
+  - if:
+      - condition: template
+        value_template: "{{ wait.trigger is not none }}"
+    then:
+      - action: neopill.correggi_assunzione
+        data:
+          event_id: "{{ event_id }}"
