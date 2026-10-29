@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.16.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.17.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -81,18 +81,36 @@ paziente e un dispositivo HA per ogni farmaco.
 
 ## Installazione
 
-### Tramite HACS (repository personalizzata)
+### Tramite HACS (consigliato)
 
-1. HACS → menu (⋮) → **Repository personalizzate** → aggiungi l'URL di questo repository, categoria
-   "Integrazione".
-2. Installa "NeoPill" dall'elenco HACS.
-3. Riavvia Home Assistant.
-4. Impostazioni → Dispositivi e servizi → Aggiungi integrazione → **NeoPill**.
+NeoPill è nello store ufficiale di HACS: non serve aggiungere repository personalizzate.
+
+1. HACS → cerca **NeoPill** → Scarica.
+2. Riavvia Home Assistant.
+3. Impostazioni → Dispositivi e servizi → Aggiungi integrazione → **NeoPill**.
+
+Alla prima installazione NeoPill crea in automatico un paziente per ogni utente Home Assistant **non
+amministratore**, collegato a quell'utente (vedi [Permessi e ruoli](#permessi)).
+
+**Se l'avevi installata come repository personalizzata** (versioni precedenti): in HACS → menu (⋮) →
+Repository personalizzate, rimuovi solo la voce `bigurka/neopill` — **non** l'integrazione. I dati restano in
+`.storage/neopill.data` e non dipendono da HACS; da quel momento gli aggiornamenti arrivano dallo store.
 
 ### Manuale
 
 Copia la cartella `custom_components/neopill` nella cartella `config/custom_components/` della tua
 installazione Home Assistant, poi riavvia.
+
+### Rimozione
+
+1. Impostazioni → Dispositivi e servizi → **NeoPill** → menu (⋮) → **Elimina**: spariscono pannello,
+   dispositivi ed entità.
+2. HACS → NeoPill → menu (⋮) → **Rimuovi** (oppure, se installata a mano, cancella la cartella
+   `config/custom_components/neopill`), poi riavvia Home Assistant.
+3. I dati (pazienti, farmaci, storico) restano nel file `config/.storage/neopill.data`: se reinstalli
+   NeoPill vengono ritrovati. Per cancellarli definitivamente elimina quel file a Home Assistant spento.
+
+Le automazioni create dalle blueprint NeoPill vanno eliminate a parte (Impostazioni → Automazioni).
 
 ## Utilizzo
 
@@ -103,6 +121,15 @@ salvano da soli quando esci dal campo, con validazione), icona per rinominare il
 aggiungere un farmaco e icona per eliminare il paziente selezionato. Sotto, i farmaci del paziente come
 tile in griglia, ciascuna con tutte le azioni quotidiane (assumi ora, segna come non assunta, rifornisci,
 modifica, elimina) — disponibili anche come entità/servizi standard di Home Assistant.
+
+Accanto al selettore compare il tuo **ruolo** sul paziente selezionato: pulsanti e campi che il ruolo non
+permette non vengono mostrati. Gli amministratori hanno in più, a destra della toolbar, le icone per
+**importare gli utenti HA** come pazienti, gestire gli **accessi** del paziente selezionato e le
+**impostazioni** (tra cui *Mostra NeoPill nella barra laterale*).
+
+Se la voce nella barra laterale è nascosta, il pannello resta raggiungibile dal link **Visita** nella pagina
+del dispositivo "‹Nome› NeoPill" del paziente (Impostazioni → Dispositivi), che lo apre direttamente su quel
+paziente, o dall'indirizzo `/neopill`.
 
 ## Card e dashboard Lovelace
 
@@ -182,6 +209,12 @@ campo dove va il testo del messaggio, in modalità YAML, usa i modelli:
 - `{{ recipient_name }}` — il nome del destinatario, impostato nei campi della blueprint
 - `{{ sender_name }}` — il nome del mittente/firma, impostato nei campi della blueprint
 
+I destinatari si scrivono nei campi **To:**, **Cc:** e **Bcc:** della blueprint (più indirizzi separati da
+virgola) e si richiamano nei campi del servizio email con `{{ email_to }}`, `{{ email_cc }}` e
+`{{ email_bcc }}` (elenchi di indirizzi), oppure `{{ email_to_text }}`, `{{ email_cc_text }}` e
+`{{ email_bcc_text }}` se il servizio vuole un testo separato da virgole. Cc e Bcc funzionano solo se il
+servizio scelto li supporta (es. `ms365_mail.mail_send` sì, `notify.smtp` no).
+
 ### `neopill_stock_depleted_notice.yaml` — Avviso scorta esaurita durante un'assunzione
 
 Segnare come "assunta" una dose con scorta già a zero non blocca nulla (il sistema si fida dell'azione
@@ -227,11 +260,35 @@ La blueprint email qui sotto usa già questo attributo al posto dello stato grez
 servizio subito dopo aver inviato la notifica — la logica è già pronta all'uso, questi dettagli servono
 solo se vuoi costruire una tua automazione personalizzata.
 
-## Permessi
+## Permessi e ruoli
 
-Qualsiasi utente Home Assistant autenticato può registrare un'assunzione, una dose "non assunta" o un
-rifornimento (dal pannello, da un pulsante o da un servizio). Solo gli utenti amministratori possono
-creare, modificare o eliminare pazienti e farmaci.
+<a id="permessi"></a>
+
+Ogni utente Home Assistant ha un **ruolo per ciascun paziente** che può vedere (lo stesso utente può essere
+*Paziente* sulla propria scheda e *Operatore* su quella di un familiare):
+
+| Ruolo | Vede | Assunzioni e rifornimenti | Farmaci, soglie, pazienti | Accessi e impostazioni |
+| --- | --- | --- | --- | --- |
+| Paziente assistito | ✓ | – | – | – |
+| Paziente | ✓ | ✓ | – | – |
+| Operatore | ✓ | ✓ | – | – |
+| Medico | ✓ | ✓ | ✓ | – |
+| Admin (amministratori HA) | tutti i pazienti | ✓ | ✓ | ✓ |
+
+- Gli **amministratori di Home Assistant** sono sempre Admin su tutti i pazienti, senza bisogno di
+  assegnarlo.
+- Alla **prima installazione** viene creato un paziente per ogni utente HA non amministratore, collegato a
+  quell'utente con ruolo **Medico** (gestisce da solo la propria terapia). Gli utenti creati in seguito si
+  aggiungono con l'icona **Importa utenti HA** del pannello.
+- Gli Admin possono creare pazienti senza un account HA (es. un familiare), collegare un paziente al suo
+  utente HA e assegnare/cambiare/togliere i ruoli dall'icona **Accessi**.
+- Un Medico può creare nuovi pazienti: quelli che crea gli vengono assegnati come Medico.
+- **Aggiornando da una versione precedente** alla 0.17.0, i pazienti esistenti restano visibili solo agli
+  amministratori finché un Admin non li collega agli utenti o assegna i ruoli.
+
+**Limite:** i ruoli valgono per il pannello NeoPill, le card e la dashboard automatica. Le entità di
+Home Assistant (sensori, pulsanti, calendari) e i servizi `neopill.*` restano visibili e usabili da
+qualunque utente HA, perché Home Assistant non prevede permessi per singolo utente sulle entità.
 
 ## Sviluppo
 
@@ -262,12 +319,13 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.16.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.17.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
-assunzioni con scorta a zero), e una card Lovelace più una dashboard automatica per paziente (vedi
-Funzionalità, Card e dashboard Lovelace e Blueprint pronte all'uso). Non ancora
+assunzioni con scorta a zero), una card Lovelace più una dashboard automatica per paziente, e ruoli per
+utente su ciascun paziente (vedi Funzionalità, Card e dashboard Lovelace, Blueprint pronte all'uso e
+Permessi e ruoli). Non ancora
 testata a fondo su un uso quotidiano reale prolungato: prima di un uso in produzione, verificare
 l'installazione secondo i passi in [Installazione](#installazione) e provare i flussi principali (creazione
 paziente/farmaco, assunzione, rifornimento, promemoria dose, cancellazione paziente) su un ambiente di
@@ -298,7 +356,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.16.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.17.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -355,17 +413,36 @@ patient and an HA device for each medication.
 
 ## Installation
 
-### Via HACS (custom repository)
+### Via HACS (recommended)
 
-1. HACS → (⋮) menu → **Custom repositories** → add this repository's URL, category "Integration".
-2. Install "NeoPill" from the HACS list.
-3. Restart Home Assistant.
-4. Settings → Devices & services → Add integration → **NeoPill**.
+NeoPill is in the official HACS store: no custom repository needed.
+
+1. HACS → search for **NeoPill** → Download.
+2. Restart Home Assistant.
+3. Settings → Devices & services → Add integration → **NeoPill**.
+
+On first install NeoPill automatically creates a patient for every **non-administrator** Home Assistant
+user, linked to that user (see [Permissions and roles](#permissions)).
+
+**If you installed it as a custom repository** (earlier versions): in HACS → (⋮) menu → Custom
+repositories, remove only the `bigurka/neopill` entry — **not** the integration. Your data lives in
+`.storage/neopill.data` and doesn't depend on HACS; from then on updates come from the store.
 
 ### Manual
 
 Copy the `custom_components/neopill` folder into your Home Assistant `config/custom_components/` folder,
 then restart.
+
+### Removal
+
+1. Settings → Devices & services → **NeoPill** → (⋮) menu → **Delete**: the panel, devices and entities
+   go away.
+2. HACS → NeoPill → (⋮) menu → **Remove** (or, if installed manually, delete the
+   `config/custom_components/neopill` folder), then restart Home Assistant.
+3. Your data (patients, medications, history) stays in `config/.storage/neopill.data`: reinstalling NeoPill
+   picks it up again. To erase it for good, delete that file while Home Assistant is stopped.
+
+Automations created from the NeoPill blueprints have to be deleted separately (Settings → Automations).
 
 ## Usage
 
@@ -376,6 +453,15 @@ validation), an icon to rename the patient, an icon to add a medication, and an 
 selected patient. Below, the patient's medications as tiles in a grid, each with all the everyday actions
 (take dose, mark as missed, restock, edit, delete) — also available as standard Home Assistant
 entities/services.
+
+Next to the selector you see your **role** on the selected patient: buttons and fields your role doesn't
+allow are not shown. Administrators also get, on the right of the toolbar, icons to **import HA users** as
+patients, manage the selected patient's **access**, and **settings** (including *Show NeoPill in the
+sidebar*).
+
+When the sidebar entry is hidden, the panel stays reachable from the **Visit** link on the patient's
+"‹Name› NeoPill" device page (Settings → Devices), which opens it straight on that patient, or at
+`/neopill`.
 
 ## Lovelace card & dashboard
 
@@ -453,6 +539,12 @@ text, in YAML mode, use these templates:
 - `{{ recipient_name }}` - the recipient's name, set in the blueprint's own fields
 - `{{ sender_name }}` - the sender/signature name, set in the blueprint's own fields
 
+Recipients go in the blueprint's **To:**, **Cc:** and **Bcc:** fields (several addresses separated by
+commas) and are used in the email service's fields as `{{ email_to }}`, `{{ email_cc }}` and
+`{{ email_bcc }}` (lists of addresses), or `{{ email_to_text }}`, `{{ email_cc_text }}` and
+`{{ email_bcc_text }}` when the service wants comma-separated text. Cc and Bcc only work if the chosen
+service supports them (e.g. `ms365_mail.mail_send` does, `notify.smtp` doesn't).
+
 ### `neopill_stock_depleted_notice.yaml` — stock-depleted notice during an intake
 
 Marking a dose "taken" when its stock is already zero doesn't block anything (the system trusts the user's
@@ -496,10 +588,34 @@ The email blueprint below already uses this attribute instead of the sensor's ra
 service right after sending the notification - this is ready to use as-is, these details only matter if
 you're building your own custom automation.
 
-## Permissions
+## Permissions and roles
 
-Any authenticated Home Assistant user can record an intake, a "missed" dose, or a restock (from the panel,
-a button, or a service). Only admin users can create, edit or delete patients and medications.
+<a id="permissions"></a>
+
+Each Home Assistant user has a **role per patient** they can see (the same user can be *Patient* on their
+own record and *Caregiver* on a relative's):
+
+| Role | Sees | Intakes and restocks | Medications, thresholds, patients | Access and settings |
+| --- | --- | --- | --- | --- |
+| Assisted patient | ✓ | – | – | – |
+| Patient | ✓ | ✓ | – | – |
+| Caregiver | ✓ | ✓ | – | – |
+| Doctor | ✓ | ✓ | ✓ | – |
+| Admin (HA administrators) | every patient | ✓ | ✓ | ✓ |
+
+- **Home Assistant administrators** are always Admin on every patient, no assignment needed.
+- On **first install** a patient is created for every non-administrator HA user, linked to that user with
+  the **Doctor** role (they manage their own therapy). Users added later are brought in with the panel's
+  **Import HA users** icon.
+- Admins can create patients without an HA account (e.g. a relative), link a patient to its HA user, and
+  assign/change/remove roles from the **Access** icon.
+- A Doctor can create new patients: the ones they create are assigned to them as Doctor.
+- **When upgrading from a version before 0.17.0**, existing patients stay visible to administrators only
+  until an Admin links them to users or assigns roles.
+
+**Limitation:** roles apply to the NeoPill panel, the cards and the auto-generated dashboard. Home
+Assistant entities (sensors, buttons, calendars) and the `neopill.*` services stay visible and usable by any
+HA user, because Home Assistant has no per-user permissions on entities.
 
 ## Development
 
@@ -531,12 +647,12 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.16.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.17.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
-HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), and a Lovelace card
-plus an auto-generated per-patient dashboard (see Features, Lovelace card & dashboard and Ready-made
-blueprints). Not yet battle-tested over
+HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), a Lovelace card plus
+an auto-generated per-patient dashboard, and per-user roles on each patient (see Features, Lovelace card &
+dashboard, Ready-made blueprints and Permissions and roles). Not yet battle-tested over
 extended real-world daily use: before
 relying on it in production, verify the install following [Installation](#installation) and try the main
 flows (creating a patient/medication, taking a dose, restocking, dose reminders, deleting a patient) in a

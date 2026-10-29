@@ -244,6 +244,28 @@ export const styles = `
   .weekly-day-toggle input[type="checkbox"] { margin: 0; }
   [data-role="weekly-day-times"] { margin-top: 8px; padding-left: 24px; }
 
+  .role-chip {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(29, 233, 255, 0.14);
+    white-space: nowrap;
+  }
+  .threshold-field input:disabled { opacity: 0.6; }
+  .hint { font-size: 12px; opacity: 0.7; margin: 0 0 10px 0; }
+  .access-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .access-row { display: grid; grid-template-columns: minmax(0, 1fr) 170px 36px; gap: 8px; align-items: center; }
+  .access-row select {
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--divider-color, #3a3f4d);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+  }
+  .access-add { border-top: 1px solid var(--divider-color, #3a3f4d); padding-top: 10px; margin-bottom: 6px; }
+  .checkbox-field { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+
   .empty-state { opacity: 0.6; padding: 24px; text-align: center; }
   .error-banner {
     background: rgba(160, 0, 0, 0.25);

@@ -12,6 +12,8 @@ from .const import DOMAIN
 
 def get_runtime_data(hass: HomeAssistant):
     entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries or entries[0].runtime_data is None:
+    # runtime_data doesn't exist at all on an entry that was never set up (or
+    # failed to), so getattr rather than a plain attribute read.
+    if not entries or getattr(entries[0], "runtime_data", None) is None:
         raise RuntimeError("NeoPill non è configurato")
     return entries[0].runtime_data

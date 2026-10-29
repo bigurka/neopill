@@ -1,7 +1,7 @@
 // NeoPill sidebar panel - plain Web Component, no build step, no external dependencies.
 // Talks to the backend exclusively through the neopill/* websocket commands (api.js).
 
-import { api } from "./api.js";
+import { api, ASSIGNABLE_ROLES, canAct, canEdit } from "./api.js";
 import { styles } from "./styles.js";
 import { resolveLang, translate } from "./i18n.js";
 
@@ -84,6 +84,9 @@ class NeoPillPanel extends HTMLElement {
     this._error = null;
     this._patientDraft = null; // { id: null|string, name: "" }
     this._medDraft = null; // full medication draft
+    this._me = null; // { user_id, is_admin, can_create_patients, settings } from neopill/me
+    this._users = []; // HA users, admin only (access dialog)
+    this._lastSearch = null;
     this.attachShadow({ mode: "open" });
   }
 
@@ -91,7 +94,16 @@ class NeoPillPanel extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (first) {
+      this._lastSearch = window.location.search;
       this._init();
+    } else if (window.location.search !== this._lastSearch) {
+      // The panel element is reused when navigating to /neopill?patient=... again
+      // (e.g. from another device's "Visit" link) - follow the new deep link.
+      this._lastSearch = window.location.search;
+      const target = this._urlPatientId();
+      if (target && target !== this._selectedPatientId && this._patients.some((p) => p.id === target)) {
+        this._selectPatient(target);
+      }
     }
   }
 
@@ -101,6 +113,22 @@ class NeoPillPanel extends HTMLElement {
 
   get _isAdmin() {
     return !!(this._hass && this._hass.user && this._hass.user.is_admin);
+  }
+
+  get _selectedPatient() {
+    return this._patients.find((p) => p.id === this._selectedPatientId) || null;
+  }
+
+  get _canEdit() {
+    return canEdit(this._selectedPatient && this._selectedPatient.role);
+  }
+
+  get _canAct() {
+    return canAct(this._selectedPatient && this._selectedPatient.role);
+  }
+
+  _urlPatientId() {
+    return new URLSearchParams(window.location.search).get("patient");
   }
 
   get _lang() {
@@ -159,6 +187,8 @@ class NeoPillPanel extends HTMLElement {
       <div class="main" id="main"></div>
       <dialog id="patientDialog"></dialog>
       <dialog id="medDialog"></dialog>
+      <dialog id="accessDialog"></dialog>
+      <dialog id="settingsDialog"></dialog>
     `;
 
     this.shadowRoot.addEventListener("click", (e) => this._handleClick(e));
@@ -167,6 +197,11 @@ class NeoPillPanel extends HTMLElement {
     this.shadowRoot.addEventListener("focusout", (e) => this._handleBlur(e));
     this.shadowRoot.addEventListener("input", (e) => this._handleThresholdInput(e));
 
+    try {
+      this._me = await api.me(this._hass);
+    } catch (err) {
+      this._error = err.message || String(err);
+    }
     await this._reloadPatients();
   }
 
@@ -192,7 +227,10 @@ class NeoPillPanel extends HTMLElement {
     // instead of showing a "select a patient" placeholder next to an apparently
     // already-selected dropdown.
     if (!this._selectedPatientId && this._patients.length) {
-      await this._selectPatient(this._patients[0].id);
+      // Deep link from the patient device's "Visit" link (?patient=<id>) wins.
+      const fromUrl = this._urlPatientId();
+      const initial = this._patients.some((p) => p.id === fromUrl) ? fromUrl : this._patients[0].id;
+      await this._selectPatient(initial);
       return;
     }
     this._renderToolbar();
@@ -248,11 +286,14 @@ class NeoPillPanel extends HTMLElement {
       .map((p) => `<option value="${p.id}" ${p.id === this._selectedPatientId ? "selected" : ""}>${esc(p.name)}</option>`)
       .join("");
 
+    const canCreate = !!(this._me && this._me.can_create_patients);
+    const thresholdsDisabled = this._canEdit ? "" : "disabled";
+
     toolbar.innerHTML = `
       <div class="patient-toolbar">
         ${
-          this._isAdmin
-            ? `<button class="iconbtn icon-badge" data-action="new-patient" title="${this.t("add_patient")}">
+          canCreate
+            ? `<button class="iconbtn icon-badge" data-action="new-patient" title="${this.t("add_patient")}" aria-label="${this.t("add_patient")}">
                  <span class="icon-base">&#128100;</span><span class="icon-plus">+</span>
                </button>`
             : ""
@@ -261,8 +302,13 @@ class NeoPillPanel extends HTMLElement {
           ${this._patients.length ? options : `<option>${this.t("no_patients_option")}</option>`}
         </select>
         ${
-          patient && this._isAdmin
-            ? `<button class="iconbtn" data-action="edit-patient" data-id="${patient.id}" title="${this.t("rename_patient_action")}">&#9998;</button>`
+          patient
+            ? `<span class="role-chip" title="${this.t("your_role")}">${esc(this.t(`role_${patient.role}`))}</span>`
+            : ""
+        }
+        ${
+          patient && this._canEdit
+            ? `<button class="iconbtn" data-action="edit-patient" data-id="${patient.id}" title="${this.t("rename_patient_action")}" aria-label="${this.t("rename_patient_action")}">&#9998;</button>`
             : ""
         }
         ${
@@ -272,15 +318,15 @@ class NeoPillPanel extends HTMLElement {
           <div class="threshold-stack">
             <label class="threshold-field">
               ${this.t("min_days")}
-              <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}">
+              <input type="number" min="0" step="1" data-role="threshold-min" value="${patient.restock_window_min_days}" ${thresholdsDisabled}>
             </label>
             <label class="threshold-field">
               ${this.t("max_days")}
-              <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}">
+              <input type="number" min="0" step="1" data-role="threshold-max" value="${patient.restock_window_max_days}" ${thresholdsDisabled}>
             </label>
           </div>
           ${
-            this._isAdmin
+            this._canEdit
               ? `
             <span class="toolbar-sep"></span>
             <button class="iconbtn icon-badge" data-action="new-medication" title="${this.t("add_medication")}">
@@ -293,7 +339,20 @@ class NeoPillPanel extends HTMLElement {
             : ""
         }
         <span class="toolbar-spacer"></span>
-        <button class="iconbtn" data-action="refresh" title="${this.t("refresh")}">&#x21bb;</button>
+        ${
+          this._isAdmin
+            ? `<button class="iconbtn icon-badge" data-action="import-users" title="${this.t("import_users")}" aria-label="${this.t("import_users")}">
+                 <span class="icon-base">&#128101;</span><span class="icon-plus">+</span>
+               </button>
+               ${
+                 patient
+                   ? `<button class="iconbtn" data-action="open-access" title="${this.t("access_title")}" aria-label="${this.t("access_title")}">&#128274;</button>`
+                   : ""
+               }
+               <button class="iconbtn" data-action="open-settings" title="${this.t("settings_title")}" aria-label="${this.t("settings_title")}">&#9881;</button>`
+            : ""
+        }
+        <button class="iconbtn" data-action="refresh" title="${this.t("refresh")}" aria-label="${this.t("refresh")}">&#x21bb;</button>
       </div>
     `;
   }
@@ -421,7 +480,7 @@ class NeoPillPanel extends HTMLElement {
         ? this._weeklyScheduleText(m.dose_schedule.weekly_times)
         : this.t("schedule_interval_text", { hours: m.dose_schedule.interval_hours ?? "-" });
 
-    const adminActions = this._isAdmin
+    const adminActions = this._canEdit
       ? `${this._pillActionButton("edit-medication", m.id, "accent", "&#9998;", this.t("edit"))}
          <button class="iconbtn danger" data-action="delete-medication" data-id="${m.id}" title="${this.t(
           "delete"
@@ -443,7 +502,9 @@ class NeoPillPanel extends HTMLElement {
           <span>${this.t("next_dose_label")} <b>${this._fmtDateTime(m.next_dose_at)}</b></span>
           ${m.next_depletion_date ? `<span>${this.t("depletion_date_label")} <b>${this._fmtDate(m.next_depletion_date)}</b></span>` : ""}
         </div>
-        <div class="action-row">
+        ${
+          this._canAct
+            ? `<div class="action-row">
           ${this._pillActionButton("take-dose", m.id, "success", "&#10003;", this.t("take_dose"))}
           ${this._pillActionButton("mark-missed", m.id, "danger", "&#10005;", this.t("mark_missed"))}
           <span class="restock-form">
@@ -453,7 +514,9 @@ class NeoPillPanel extends HTMLElement {
             ${this._pillActionButton("do-restock", m.id, "accent", "&#8592;", this.t("restock"), true)}
           </span>
           ${adminActions}
-        </div>
+        </div>`
+            : ""
+        }
       </div>
     `;
   }
@@ -595,9 +658,129 @@ class NeoPillPanel extends HTMLElement {
     dialog.showModal();
   }
 
+  _userName(userId) {
+    const user = this._users.find((u) => u.id === userId);
+    return user ? user.name : userId;
+  }
+
+  _roleOptions(selected) {
+    return ASSIGNABLE_ROLES.map(
+      (r) => `<option value="${r}" ${r === selected ? "selected" : ""}>${esc(this.t(`role_${r}`))}</option>`
+    ).join("");
+  }
+
+  async _openAccessDialog() {
+    this._users = await api.listUsers(this._hass);
+    this._renderAccessDialog();
+    this.shadowRoot.getElementById("accessDialog").showModal();
+  }
+
+  _renderAccessDialog() {
+    const patient = this._selectedPatient;
+    const dialog = this.shadowRoot.getElementById("accessDialog");
+    if (!patient || !dialog) return;
+    const access = patient.access || {};
+    // Admins always see everything, so granting them a role would only be noise.
+    const assignable = this._users.filter((u) => !u.is_admin);
+    const linkedElsewhere = new Set(
+      this._patients.filter((p) => p.id !== patient.id && p.ha_user_id).map((p) => p.ha_user_id)
+    );
+    const linkOptions = this._users
+      .filter((u) => !linkedElsewhere.has(u.id))
+      .map(
+        (u) => `<option value="${u.id}" ${u.id === patient.ha_user_id ? "selected" : ""}>${esc(u.name)}</option>`
+      )
+      .join("");
+    const rows = Object.entries(access)
+      .map(
+        ([userId, role]) => `
+        <div class="access-row">
+          <span>${esc(this._userName(userId))}</span>
+          <select data-role="access-role" data-user="${userId}">${this._roleOptions(role)}</select>
+          <button type="button" class="iconbtn danger" data-action="remove-access" data-user="${userId}" title="${this.t("remove_access")}" aria-label="${this.t("remove_access")}">&#128465;</button>
+        </div>`
+      )
+      .join("");
+    const free = assignable.filter((u) => !(u.id in access));
+    dialog.innerHTML = `
+      <div class="dialog-body">
+        <h2>${this.t("access_title")}: ${esc(patient.name)}</h2>
+        <div class="field">
+          <label>${this.t("linked_user_label")}</label>
+          <select data-role="link-user">
+            <option value="" ${patient.ha_user_id ? "" : "selected"}>${this.t("linked_user_none")}</option>
+            ${linkOptions}
+          </select>
+        </div>
+        <p class="hint">${this.t("access_admins_hint")}</p>
+        ${rows ? `<div class="access-list">${rows}</div>` : `<div class="empty-state">${this.t("access_empty")}</div>`}
+        ${
+          free.length
+            ? `<div class="access-row access-add">
+                 <select data-role="new-access-user">${free
+                   .map((u) => `<option value="${u.id}">${esc(u.name)}</option>`)
+                   .join("")}</select>
+                 <select data-role="new-access-role">${this._roleOptions("caregiver")}</select>
+                 <button type="button" class="iconbtn" data-action="add-access" title="${this.t("add_access")}" aria-label="${this.t("add_access")}">+</button>
+               </div>`
+            : ""
+        }
+        <div class="dialog-actions">
+          <button type="button" data-action="close-access-dialog">${this.t("close")}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  _replacePatient(updated) {
+    // Keep the caller's role from the list: access/set answers with an admin payload.
+    this._patients = this._patients.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+  }
+
+  _openSettingsDialog() {
+    const settings = (this._me && this._me.settings) || {};
+    const dialog = this.shadowRoot.getElementById("settingsDialog");
+    dialog.innerHTML = `
+      <div class="dialog-body">
+        <h2>${this.t("settings_title")}</h2>
+        <label class="checkbox-field">
+          <input type="checkbox" data-role="setting-show-sidebar" ${settings.show_in_sidebar !== false ? "checked" : ""}>
+          ${this.t("setting_show_sidebar")}
+        </label>
+        <p class="hint">${this.t("setting_show_sidebar_hint")}</p>
+        <div class="dialog-actions">
+          <button type="button" data-action="close-settings-dialog">${this.t("close")}</button>
+        </div>
+      </div>
+    `;
+    dialog.showModal();
+  }
+
+  async _handleAdminChange(e) {
+    const patient = this._selectedPatient;
+    try {
+      if (e.target.matches('[data-role="access-role"]') && patient) {
+        this._replacePatient(await api.setAccess(this._hass, patient.id, e.target.dataset.user, e.target.value));
+        this._renderAccessDialog();
+      } else if (e.target.matches('[data-role="link-user"]') && patient) {
+        this._replacePatient(await api.linkUser(this._hass, patient.id, e.target.value || null));
+        this._renderAccessDialog();
+      } else if (e.target.matches('[data-role="setting-show-sidebar"]')) {
+        const settings = await api.updateSettings(this._hass, { show_in_sidebar: e.target.checked });
+        if (this._me) this._me.settings = settings;
+      }
+    } catch (err) {
+      alert(err.message || String(err));
+    }
+  }
+
   // ---- Event handling ----
 
   _handleChange(e) {
+    if (e.target.matches('[data-role="access-role"], [data-role="link-user"], [data-role="setting-show-sidebar"]')) {
+      this._handleAdminChange(e);
+      return;
+    }
     if (e.target.matches('[data-role="patient-select"]')) {
       this._selectPatient(e.target.value);
     }
@@ -715,6 +898,36 @@ class NeoPillPanel extends HTMLElement {
         case "close-med-dialog":
           this.shadowRoot.getElementById("medDialog").close();
           break;
+        case "import-users": {
+          const created = await api.importUsers(this._hass);
+          alert(this.t("import_users_done", { count: created.length }));
+          await this._reloadPatients();
+          break;
+        }
+        case "open-access":
+          await this._openAccessDialog();
+          break;
+        case "close-access-dialog":
+          this.shadowRoot.getElementById("accessDialog").close();
+          break;
+        case "add-access": {
+          const row = el.closest(".access-add");
+          const userId = row.querySelector('[data-role="new-access-user"]').value;
+          const role = row.querySelector('[data-role="new-access-role"]').value;
+          this._replacePatient(await api.setAccess(this._hass, this._selectedPatientId, userId, role));
+          this._renderAccessDialog();
+          break;
+        }
+        case "remove-access":
+          this._replacePatient(await api.setAccess(this._hass, this._selectedPatientId, el.dataset.user, null));
+          this._renderAccessDialog();
+          break;
+        case "open-settings":
+          this._openSettingsDialog();
+          break;
+        case "close-settings-dialog":
+          this.shadowRoot.getElementById("settingsDialog").close();
+          break;
         case "add-time-row": {
           const list = this.shadowRoot
             .getElementById("medDialog")
@@ -830,4 +1043,4 @@ class NeoPillPanel extends HTMLElement {
   }
 }
 
-customElements.define("neopill-panel", NeoPillPanel);
+if (!customElements.get("neopill-panel")) customElements.define("neopill-panel", NeoPillPanel);

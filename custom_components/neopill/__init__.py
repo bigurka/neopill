@@ -10,12 +10,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
+from .access import async_import_ha_users
 from .const import DOMAIN, SIGNAL_MEDICATION_REMOVED, SIGNAL_PATIENT_REMOVED
 from .coordinator import DoseScheduler
 from .entity import patient_hub_identifier
 from .migrations import async_cleanup_legacy_entities
 from .panel import async_register_panel, async_unregister_panel
-from .services import async_setup_services, async_unload_services
+from .services import async_setup_services
 from .storage import NeoPillStore
 from .websocket_api import async_setup_websocket_api
 
@@ -38,14 +39,22 @@ type NeoPillConfigEntry = ConfigEntry[NeoPillRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the (process-global) websocket API once, regardless of config entries."""
+    """Register the (process-global) websocket API and services once, regardless of
+    config entries - services must exist even while the entry isn't loaded."""
     async_setup_websocket_api(hass)
+    async_setup_services(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> bool:
     store = NeoPillStore(hass)
     await store.async_load()
+
+    if not store.settings["initial_import_done"]:
+        # First install: every non-admin HA user starts with their own patient.
+        # Later users are added by an admin from the panel ("Import HA users").
+        await async_import_ha_users(hass, store)
+        await store.async_update_settings(initial_import_done=True)
 
     scheduler = DoseScheduler(hass, store)
     await scheduler.async_setup()
@@ -76,8 +85,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> b
         async_dispatcher_connect(hass, SIGNAL_PATIENT_REMOVED, _remove_patient_device)
     )
 
-    async_setup_services(hass)
-    await async_register_panel(hass)
+    await async_register_panel(hass, store.settings["show_in_sidebar"])
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -86,6 +94,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         await entry.runtime_data.scheduler.async_unload()
-        async_unload_services(hass)
         await async_unregister_panel(hass)
     return unload_ok

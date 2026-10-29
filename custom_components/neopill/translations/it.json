@@ -12,24 +12,133 @@
   },
   "entity": {
     "sensor": {
-      "stock": { "name": "Scorta" },
-      "days_remaining": { "name": "Giorni rimanenti" },
-      "next_dose": { "name": "Prossima assunzione" },
-      "restock_reminder": { "name": "Farmaci da rifornire" }
+      "stock": {
+        "name": "Scorta"
+      },
+      "days_remaining": {
+        "name": "Giorni rimanenti"
+      },
+      "next_dose": {
+        "name": "Prossima assunzione"
+      },
+      "restock_reminder": {
+        "name": "Farmaci da rifornire"
+      }
     },
     "binary_sensor": {
-      "dose_due": { "name": "Da assumere" },
-      "low_stock": { "name": "Scorta in esaurimento" }
+      "dose_due": {
+        "name": "Da assumere"
+      },
+      "low_stock": {
+        "name": "Scorta in esaurimento"
+      }
     },
     "button": {
-      "take_dose": { "name": "Assumi ora" },
-      "mark_missed": { "name": "Segna come non assunta" },
-      "restock_package": { "name": "Rifornisci (1 confezione)" },
-      "take_all": { "name": "Assumi tutti ore {time}" },
-      "mark_all_missed": { "name": "Segna tutti non assunti ore {time}" }
+      "take_dose": {
+        "name": "Assumi ora"
+      },
+      "mark_missed": {
+        "name": "Segna come non assunta"
+      },
+      "restock_package": {
+        "name": "Rifornisci (1 confezione)"
+      },
+      "take_all": {
+        "name": "Assumi tutti ore {time}"
+      },
+      "mark_all_missed": {
+        "name": "Segna tutti non assunti ore {time}"
+      }
     },
     "calendar": {
-      "calendar": { "name": "Calendario" }
+      "calendar": {
+        "name": "Calendario"
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "NeoPill non è caricato. Controlla Impostazioni > Dispositivi e servizi."
+    },
+    "medication_not_found": {
+      "message": "Nessun farmaco NeoPill con ID {id}."
+    },
+    "patient_not_found": {
+      "message": "Nessun paziente NeoPill con ID {id}."
+    },
+    "event_not_found": {
+      "message": "Nessun evento di assunzione NeoPill con ID {id}."
+    },
+    "invalid_restock": {
+      "message": "Rifornimento non valido: {error}"
+    }
+  },
+  "services": {
+    "assumi_farmaco": {
+      "name": "Assumi farmaco",
+      "description": "Registra l'assunzione di una dose di un farmaco, scalando la scorta.",
+      "fields": {
+        "medication_id": {
+          "name": "Farmaco",
+          "description": "ID del farmaco."
+        },
+        "amount": {
+          "name": "Quantità",
+          "description": "Quantità assunta. Se omessa, viene usata la dose configurata per il farmaco."
+        }
+      }
+    },
+    "segna_non_assunta": {
+      "name": "Segna come non assunta",
+      "description": "Dichiara che una dose pianificata non è stata assunta, senza scalare la scorta.",
+      "fields": {
+        "medication_id": {
+          "name": "Farmaco",
+          "description": "ID del farmaco."
+        }
+      }
+    },
+    "rifornisci_farmaco": {
+      "name": "Rifornisci farmaco",
+      "description": "Aggiunge scorta a un farmaco, per quantità diretta oppure per numero di confezioni (usa la dimensione confezione configurata sul farmaco).",
+      "fields": {
+        "medication_id": {
+          "name": "Farmaco",
+          "description": "ID del farmaco."
+        },
+        "amount": {
+          "name": "Quantità",
+          "description": "Unità da aggiungere direttamente. Alternativa a \"packages\"."
+        },
+        "packages": {
+          "name": "Confezioni",
+          "description": "Numero di confezioni da aggiungere. Alternativa a \"amount\"."
+        }
+      }
+    },
+    "segna_rifornimento_notificato": {
+      "name": "Segna rifornimento notificato",
+      "description": "Dichiara che l'utente è già stato avvisato di uno o più farmaci da rifornire, così i loro attributi \"da_notificare\" tornano a false finché la situazione non cambia. Da chiamare dalle proprie automazioni subito dopo la notifica.",
+      "fields": {
+        "medication_id": {
+          "name": "Farmaco",
+          "description": "ID del farmaco da confermare da solo. Alternativa a \"patient_id\"."
+        },
+        "patient_id": {
+          "name": "Paziente",
+          "description": "ID del paziente: conferma tutti i suoi farmaci attualmente da notificare. Alternativa a \"medication_id\"."
+        }
+      }
+    },
+    "correggi_assunzione": {
+      "name": "Correggi assunzione in non assunta",
+      "description": "Trasforma una dose già registrata come \"assunta\" in \"non assunta\", ripristinando la scorta scalata. Pensato per un \"Assumi tutti\" che ha incluso un farmaco già a scorta zero. L'ID evento arriva dalla notifica di scorta esaurita (evento \"neopill_stock_depleted\").",
+      "fields": {
+        "event_id": {
+          "name": "Evento",
+          "description": "ID dell'evento di assunzione da correggere."
+        }
+      }
     }
   }
 }

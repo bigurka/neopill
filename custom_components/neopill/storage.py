@@ -44,6 +44,13 @@ _LOGGER = logging.getLogger(__name__)
 
 _SAVE_DELAY = 5
 
+_DEFAULT_SETTINGS: dict[str, Any] = {
+    "show_in_sidebar": True,
+    # Set once the first-install import of non-admin HA users has run, so deleting
+    # an imported patient later doesn't make it come back on the next restart.
+    "initial_import_done": False,
+}
+
 
 class PatientNotFoundError(KeyError):
     """Raised when a patient id does not exist."""
@@ -67,9 +74,16 @@ class NeoPillStore:
         self.medications: dict[str, Medication] = {}
         self.intake_events: list[IntakeEvent] = []
         self.restock_events: list[RestockEvent] = []
+        self.settings: dict[str, Any] = dict(_DEFAULT_SETTINGS)
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
+        self.settings = {**_DEFAULT_SETTINGS, **data.get("settings", {})}
+        if not data.get("settings"):
+            # Installations that already have patients predate per-user access:
+            # their patients stay admin-only until an admin assigns them, rather
+            # than being silently matched to HA users.
+            self.settings["initial_import_done"] = bool(data.get("patients"))
         self.patients = {
             pid: Patient.from_dict(pdata) for pid, pdata in data.get("patients", {}).items()
         }
@@ -86,6 +100,7 @@ class NeoPillStore:
             "medications": {mid: m.as_dict() for mid, m in self.medications.items()},
             "intake_events": [e.as_dict() for e in self.intake_events],
             "restock_events": [e.as_dict() for e in self.restock_events],
+            "settings": dict(self.settings),
         }
 
     async def _async_save(self) -> None:
@@ -105,10 +120,16 @@ class NeoPillStore:
         except KeyError as err:
             raise PatientNotFoundError(patient_id) from err
 
-    async def async_add_patient(self, name: str) -> Patient:
+    async def async_add_patient(
+        self,
+        name: str,
+        *,
+        ha_user_id: str | None = None,
+        access: dict[str, str] | None = None,
+    ) -> Patient:
         existing_slugs = {p.slug for p in self.patients.values()}
         slug = generate_patient_slug(name, existing_slugs)
-        patient = Patient(name=name, slug=slug)
+        patient = Patient(name=name, slug=slug, ha_user_id=ha_user_id, access=dict(access or {}))
         self.patients[patient.id] = patient
         await self._async_save()
         async_dispatcher_send(self._hass, SIGNAL_PATIENT_ADDED, patient)
@@ -136,6 +157,44 @@ class NeoPillStore:
         patient = self.get_patient(patient_id)
         patient.restock_previous_decided_ids = medication_ids
         self._async_delay_save()
+
+    def patient_for_ha_user(self, user_id: str) -> Patient | None:
+        return next((p for p in self.patients.values() if p.ha_user_id == user_id), None)
+
+    async def async_set_access(self, patient_id: str, user_id: str, role: str | None) -> Patient:
+        """Grant/change (role) or revoke (None) one HA user's access to a patient.
+
+        Access only drives what the panel/cards show, not any entity, so this
+        persists without SIGNAL_PATIENT_UPDATED (which would recompute sensors).
+        """
+        patient = self.get_patient(patient_id)
+        if role is None:
+            patient.access.pop(user_id, None)
+        else:
+            patient.access[user_id] = role
+        await self._async_save()
+        return patient
+
+    async def async_link_ha_user(self, patient_id: str, user_id: str | None, own_role: str) -> Patient:
+        """Mark which HA user this patient is (None to unlink).
+
+        Linking also grants that user own_role unless they already have a role
+        here; unlinking leaves their access alone (an admin removes it explicitly).
+        """
+        patient = self.get_patient(patient_id)
+        if user_id is not None:
+            other = self.patient_for_ha_user(user_id)
+            if other is not None and other.id != patient_id:
+                raise ValueError(f"HA user {user_id} is already linked to patient {other.name}")
+            patient.access.setdefault(user_id, own_role)
+        patient.ha_user_id = user_id
+        await self._async_save()
+        return patient
+
+    async def async_update_settings(self, **fields: Any) -> dict[str, Any]:
+        self.settings.update({k: v for k, v in fields.items() if k in _DEFAULT_SETTINGS})
+        await self._async_save()
+        return dict(self.settings)
 
     async def async_delete_patient(self, patient_id: str) -> None:
         self.get_patient(patient_id)

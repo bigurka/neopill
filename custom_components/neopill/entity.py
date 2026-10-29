@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
-from .const import DOMAIN, SIGNAL_MEDICATION_UPDATED
+from .const import DOMAIN, PANEL_URL_PATH, SIGNAL_MEDICATION_UPDATED
 from .models import Medication, Patient
 from .storage import NeoPillStore
 
@@ -26,7 +27,14 @@ def patient_hub_device_info(patient: Patient) -> DeviceInfo:
         name=f"{patient.name} NeoPill",
         manufacturer="NeoPill",
         model="Paziente",
+        configuration_url=patient_panel_url(patient.id),
     )
+
+
+def patient_panel_url(patient_id: str) -> str:
+    """Deep link opening the NeoPill panel on this patient - shown as the device's
+    "Visit" link, so the panel is reachable even with its sidebar entry hidden."""
+    return f"homeassistant://{PANEL_URL_PATH}?patient={patient_id}"
 
 
 def medication_device_info(medication: Medication, patient: Patient | None) -> DeviceInfo:

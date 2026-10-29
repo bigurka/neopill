@@ -9,6 +9,20 @@ PANEL_URL_PATH = "neopill"
 PANEL_TITLE = "NeoPill"
 PANEL_ICON = "mdi:pill-multiple"
 
+# Per (HA user, patient) access roles. HA administrators are never stored here:
+# they always see and manage everything (ROLE_ADMIN is only ever computed).
+ROLE_ASSISTED = "assisted"  # view only
+ROLE_PATIENT = "patient"  # view + record intakes/restocks
+ROLE_CAREGIVER = "caregiver"  # same rights as ROLE_PATIENT, someone assisting
+ROLE_DOCTOR = "doctor"  # everything except managing access
+ROLE_ADMIN = "admin"
+ASSIGNABLE_ROLES = [ROLE_ASSISTED, ROLE_PATIENT, ROLE_CAREGIVER, ROLE_DOCTOR]
+ACTION_ROLES = {ROLE_PATIENT, ROLE_CAREGIVER, ROLE_DOCTOR, ROLE_ADMIN}
+EDIT_ROLES = {ROLE_DOCTOR, ROLE_ADMIN}
+# Role given to a patient's own linked HA user when the patient is created from
+# that user (first install / "import HA users"): they manage their own therapy.
+DEFAULT_OWN_ROLE = ROLE_DOCTOR
+
 EVENT_DOSE_DUE = "neopill_dose_due"
 # Fired whenever a "taken" intake brings a medication's stock to zero - lets an
 # automation (see the neopill_stock_depleted_notice blueprint) offer a quick

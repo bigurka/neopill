@@ -116,6 +116,12 @@ class Patient:
     # to pending on every recompute). Persisted so a restart doesn't look like every
     # medication just freshly joined.
     restock_previous_decided_ids: list[str] = field(default_factory=list)
+    # HA user this patient *is* (set when created from an HA user, or linked later by
+    # an admin). None for patients without their own HA account.
+    ha_user_id: str | None = None
+    # HA user id -> role (const.ASSIGNABLE_ROLES). Non-admin users only see patients
+    # listed here; HA admins see everything regardless.
+    access: dict[str, str] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -125,6 +131,8 @@ class Patient:
             "restock_window_min_days": self.restock_window_min_days,
             "restock_window_max_days": self.restock_window_max_days,
             "restock_previous_decided_ids": self.restock_previous_decided_ids,
+            "ha_user_id": self.ha_user_id,
+            "access": dict(self.access),
         }
 
     @classmethod
@@ -140,6 +148,8 @@ class Patient:
                 "restock_window_max_days", DEFAULT_RESTOCK_WINDOW_MAX_DAYS
             ),
             restock_previous_decided_ids=list(data.get("restock_previous_decided_ids", [])),
+            ha_user_id=data.get("ha_user_id"),
+            access=dict(data.get("access", {})),
         )
 
 

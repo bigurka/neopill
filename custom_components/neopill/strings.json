@@ -12,24 +12,133 @@
   },
   "entity": {
     "sensor": {
-      "stock": { "name": "Stock" },
-      "days_remaining": { "name": "Days remaining" },
-      "next_dose": { "name": "Next dose" },
-      "restock_reminder": { "name": "Medications to reorder" }
+      "stock": {
+        "name": "Stock"
+      },
+      "days_remaining": {
+        "name": "Days remaining"
+      },
+      "next_dose": {
+        "name": "Next dose"
+      },
+      "restock_reminder": {
+        "name": "Medications to reorder"
+      }
     },
     "binary_sensor": {
-      "dose_due": { "name": "Dose due" },
-      "low_stock": { "name": "Low stock" }
+      "dose_due": {
+        "name": "Dose due"
+      },
+      "low_stock": {
+        "name": "Low stock"
+      }
     },
     "button": {
-      "take_dose": { "name": "Take dose" },
-      "mark_missed": { "name": "Mark as missed" },
-      "restock_package": { "name": "Restock (1 package)" },
-      "take_all": { "name": "Take all at {time}" },
-      "mark_all_missed": { "name": "Mark all missed at {time}" }
+      "take_dose": {
+        "name": "Take dose"
+      },
+      "mark_missed": {
+        "name": "Mark as missed"
+      },
+      "restock_package": {
+        "name": "Restock (1 package)"
+      },
+      "take_all": {
+        "name": "Take all at {time}"
+      },
+      "mark_all_missed": {
+        "name": "Mark all missed at {time}"
+      }
     },
     "calendar": {
-      "calendar": { "name": "Calendar" }
+      "calendar": {
+        "name": "Calendar"
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "NeoPill is not loaded. Check Settings > Devices & services."
+    },
+    "medication_not_found": {
+      "message": "No NeoPill medication with ID {id}."
+    },
+    "patient_not_found": {
+      "message": "No NeoPill patient with ID {id}."
+    },
+    "event_not_found": {
+      "message": "No NeoPill intake event with ID {id}."
+    },
+    "invalid_restock": {
+      "message": "Invalid restock: {error}"
+    }
+  },
+  "services": {
+    "assumi_farmaco": {
+      "name": "Take medication",
+      "description": "Records that a dose of a medication was taken, reducing its stock.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication",
+          "description": "Medication ID."
+        },
+        "amount": {
+          "name": "Amount",
+          "description": "Amount taken. If omitted, the medication's configured dose is used."
+        }
+      }
+    },
+    "segna_non_assunta": {
+      "name": "Mark as missed",
+      "description": "Declares that a scheduled dose was not taken, without reducing the stock.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication",
+          "description": "Medication ID."
+        }
+      }
+    },
+    "rifornisci_farmaco": {
+      "name": "Restock medication",
+      "description": "Adds stock to a medication, either as a direct amount or as a number of packages (uses the package size configured on the medication).",
+      "fields": {
+        "medication_id": {
+          "name": "Medication",
+          "description": "Medication ID."
+        },
+        "amount": {
+          "name": "Amount",
+          "description": "Units to add directly. Alternative to \"packages\"."
+        },
+        "packages": {
+          "name": "Packages",
+          "description": "Number of packages to add. Alternative to \"amount\"."
+        }
+      }
+    },
+    "segna_rifornimento_notificato": {
+      "name": "Mark restock as notified",
+      "description": "Declares that the user was already notified about one or more medications to reorder, so their \"da_notificare\" attributes go back to false until the situation changes. Call it from your automations right after notifying.",
+      "fields": {
+        "medication_id": {
+          "name": "Medication",
+          "description": "ID of a single medication to confirm. Alternative to \"patient_id\"."
+        },
+        "patient_id": {
+          "name": "Patient",
+          "description": "Patient ID: confirms all of their medications currently pending notification. Alternative to \"medication_id\"."
+        }
+      }
+    },
+    "correggi_assunzione": {
+      "name": "Correct intake to missed",
+      "description": "Turns a dose already recorded as \"taken\" into \"missed\", restoring the stock it consumed. Meant for a bulk \"Take all\" that included a medication already out of stock. The event ID comes from the stock-depleted notification (event \"neopill_stock_depleted\").",
+      "fields": {
+        "event_id": {
+          "name": "Event",
+          "description": "ID of the intake event to correct."
+        }
+      }
     }
   }
 }

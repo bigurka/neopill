@@ -1,7 +1,7 @@
 // NeoPill patient summary Lovelace card: doses due now, next dose, low-stock/restock
 // warnings, with one-tap take/missed actions. Plain web component, no build step -
 // served as-is from the same versioned static path as the full panel.
-import { api } from "./api.js";
+import { api, canAct } from "./api.js";
 import { resolveLang, translate } from "./i18n.js";
 
 const CARD_TAG = "neopill-patient-card";
@@ -77,15 +77,15 @@ class NeoPillPatientCard extends HTMLElement {
     if (!this._hass || !this._patientId || this._fetching) return;
     this._fetching = true;
     try {
-      const needsName = !this._config.title;
+      // Always fetched (not only for the name): it carries the viewer's role,
+      // which decides whether the take/missed buttons are shown at all.
       const [patients, medications] = await Promise.all([
-        needsName ? api.listPatients(this._hass) : Promise.resolve(null),
+        api.listPatients(this._hass),
         api.listMedications(this._hass, this._patientId),
       ]);
-      if (patients) {
-        const patient = patients.find((p) => p.id === this._patientId);
-        this._patientName = patient ? patient.name : this._patientId;
-      }
+      const patient = patients.find((p) => p.id === this._patientId);
+      this._patientName = patient ? patient.name : this._patientId;
+      this._canAct = !!patient && canAct(patient.role);
       this._medications = medications;
       this._error = null;
     } catch (err) {
@@ -168,14 +168,18 @@ class NeoPillPatientCard extends HTMLElement {
           (m) => `
         <div class="row due-row">
           <span class="name">${m.display_name || m.name}</span>
-          <span class="actions">
+          ${
+            this._canAct
+              ? `<span class="actions">
             <button class="iconbtn take" data-action="take" data-id="${m.id}" title="${this._t(
-            "take_dose"
-          )}">✓</button>
+                  "take_dose"
+                )}">✓</button>
             <button class="iconbtn missed" data-action="missed" data-id="${m.id}" title="${this._t(
-            "mark_missed"
-          )}">✕</button>
-          </span>
+                  "mark_missed"
+                )}">✕</button>
+          </span>`
+              : ""
+          }
         </div>`
         )
         .join("");
@@ -183,14 +187,18 @@ class NeoPillPatientCard extends HTMLElement {
         <section>
           <div class="section-head">
             <h4>${this._t("card_due_now")}</h4>
-            <span class="actions">
+            ${
+              this._canAct
+                ? `<span class="actions">
               <button class="iconbtn take" data-action="take-all" title="${this._t(
-                "card_take_all_title"
-              )}">✓</button>
+                    "card_take_all_title"
+                  )}">✓</button>
               <button class="iconbtn missed" data-action="missed-all" title="${this._t(
-                "card_mark_all_missed_title"
-              )}">✕</button>
-            </span>
+                    "card_mark_all_missed_title"
+                  )}">✕</button>
+            </span>`
+                : ""
+            }
           </div>
           ${rows}
         </section>
@@ -561,13 +569,16 @@ class NeoPillStockCard extends HTMLElement {
 }
 
 if (!customElements.get(CARD_TAG)) {
-  customElements.define(CARD_TAG, NeoPillPatientCard);
+  // Guarded like the strategy: two versions of this script can end up loaded in the
+// same page (e.g. after an update without a full reload), and a second define()
+// of the same tag throws.
+if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, NeoPillPatientCard);
 }
 if (!customElements.get(EDITOR_TAG)) {
-  customElements.define(EDITOR_TAG, NeoPillPatientCardEditor);
+  if (!customElements.get(EDITOR_TAG)) customElements.define(EDITOR_TAG, NeoPillPatientCardEditor);
 }
 if (!customElements.get(STOCK_CARD_TAG)) {
-  customElements.define(STOCK_CARD_TAG, NeoPillStockCard);
+  if (!customElements.get(STOCK_CARD_TAG)) customElements.define(STOCK_CARD_TAG, NeoPillStockCard);
 }
 
 window.customCards = window.customCards || [];

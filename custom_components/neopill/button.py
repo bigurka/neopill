@@ -13,8 +13,8 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .actions import async_mark_missed, async_restock, async_take_dose
 from .const import (
@@ -29,7 +29,10 @@ from .models import Medication
 from .storage import NeoPillStore
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback) -> None:
+# Everything is computed locally from NeoPill's own store: no limit needed.
+PARALLEL_UPDATES = 0
+
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     store: NeoPillStore = entry.runtime_data.store
     scheduler = entry.runtime_data.scheduler
 

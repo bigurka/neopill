@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     SIGNAL_DOSE_DUE_CHANGED,
@@ -20,7 +20,10 @@ from .models import IntakeEvent, Medication, RestockEvent
 from .storage import NeoPillStore
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback) -> None:
+# Everything is computed locally from NeoPill's own store: no limit needed.
+PARALLEL_UPDATES = 0
+
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     store: NeoPillStore = entry.runtime_data.store
     scheduler = entry.runtime_data.scheduler
 

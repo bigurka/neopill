@@ -17,7 +17,7 @@ blueprint:
     torna a zero e poi si ripresenta.
   domain: automation
   author: bigurka
-  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_restock_email.yaml
+  source_url: https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_restock_email.yaml
   input:
     restock_sensor:
       name: Sensore rifornimento
@@ -69,17 +69,46 @@ blueprint:
       default: ""
       selector:
         text:
+    email_to:
+      name: "Destinatari (To:)"
+      description: >-
+        Uno o più indirizzi email separati da virgola. Richiamali nel campo
+        destinatari del tuo servizio email con "{{ email_to }}" (elenco di
+        indirizzi) o "{{ email_to_text }}" (testo separato da virgole).
+      default: ""
+      selector:
+        text:
+    email_cc:
+      name: "Copia (Cc:)"
+      description: >-
+        Facoltativo. Indirizzi separati da virgola; nel servizio email usa
+        "{{ email_cc }}" (elenco) o "{{ email_cc_text }}" (testo).
+      default: ""
+      selector:
+        text:
+    email_bcc:
+      name: "Copia nascosta (Bcc:)"
+      description: >-
+        Facoltativo. Indirizzi separati da virgola; nel servizio email usa
+        "{{ email_bcc }}" (elenco) o "{{ email_bcc_text }}" (testo). Non
+        tutti i servizi supportano Cc/Bcc (es. notify.smtp no,
+        ms365_mail sì).
+      default: ""
+      selector:
+        text:
     email_action:
       name: Azione di invio email
       description: >-
         L'azione da eseguire per inviare l'email (es. ms365_mail.mail_send,
         notify.smtp, notify.gmail o qualsiasi altro servizio email
         disponibile in Home Assistant). Scegli il servizio e compila i
-        suoi campi come faresti in una normale automazione (destinatari,
-        oggetto, ecc.). Nel campo dove va il testo del messaggio, passa in
-        modalità YAML e usa i modelli "{{ testo }}", "{{ recipient_name }}"
-        e "{{ sender_name }}" per includere rispettivamente l'elenco dei
-        farmaci, il nome del destinatario e il nome del mittente.
+        suoi campi come faresti in una normale automazione (oggetto, ecc.).
+        Per i destinatari usa "{{ email_to }}", "{{ email_cc }}" e
+        "{{ email_bcc }}" (vedi i campi To/Cc/Bcc sopra). Nel campo dove va
+        il testo del messaggio, passa in modalità YAML e usa i modelli
+        "{{ testo }}", "{{ recipient_name }}" e "{{ sender_name }}" per
+        includere rispettivamente l'elenco dei farmaci, il nome del
+        destinatario e il nome del mittente.
       selector:
         action: {}
     confirm_timeout_minutes:
@@ -97,11 +126,11 @@ blueprint:
 
 mode: single
 
-trigger:
-  - platform: time
+triggers:
+  - trigger: time
     at: !input check_time
 
-condition:
+conditions:
   - condition: template
     value_template: "{{ state_attr(restock_sensor, 'da_notificare') | default(false) }}"
 
@@ -111,10 +140,17 @@ variables:
   require_confirmation: !input require_confirmation
   recipient_name: !input recipient_name
   sender_name: !input sender_name
+  email_to_text: !input email_to
+  email_cc_text: !input email_cc
+  email_bcc_text: !input email_bcc
+  # Comma-separated text -> list of trimmed, non-empty addresses.
+  email_to: "{{ email_to_text.split(',') | map('trim') | reject('eq', '') | list }}"
+  email_cc: "{{ email_cc_text.split(',') | map('trim') | reject('eq', '') | list }}"
+  email_bcc: "{{ email_bcc_text.split(',') | map('trim') | reject('eq', '') | list }}"
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
   patient_id: "{{ state_attr(restock_sensor, 'patient_id') }}"
 
-action:
+actions:
   - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
     data:
       title: "Promemoria rifornimento farmaci"
@@ -135,11 +171,11 @@ action:
         value_template: "{{ require_confirmation }}"
     then:
       - wait_for_trigger:
-          - platform: event
+          - trigger: event
             event_type: mobile_app_notification_action
             event_data:
               action: "NEOPILL_INVIA_EMAIL_{{ context.id }}"
-          - platform: event
+          - trigger: event
             event_type: mobile_app_notification_action
             event_data:
               action: "NEOPILL_ANNULLA_{{ context.id }}"

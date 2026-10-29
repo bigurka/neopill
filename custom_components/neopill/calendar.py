@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
     CALENDAR_EVENT_DEPLETED,
@@ -34,18 +34,41 @@ from .entity import patient_hub_device_info
 from .models import Patient
 from .storage import NeoPillStore
 
+# Calendar event summaries are plain text, outside HA's entity translation system,
+# so they're localized here by the server language (Settings > System > General).
+_DUE = "due"
 _EVENT_LABELS = {
-    CALENDAR_EVENT_TAKEN: "Assunta",
-    CALENDAR_EVENT_MISSED: "Non assunta",
-    CALENDAR_EVENT_UNANSWERED: "Nessuna risposta",
-    CALENDAR_EVENT_RESTOCK: "Rifornimento",
-    CALENDAR_EVENT_DEPLETED: "Scorta esaurita",
+    "it": {
+        CALENDAR_EVENT_TAKEN: "Assunta",
+        CALENDAR_EVENT_MISSED: "Non assunta",
+        CALENDAR_EVENT_UNANSWERED: "Nessuna risposta",
+        CALENDAR_EVENT_RESTOCK: "Rifornimento",
+        CALENDAR_EVENT_DEPLETED: "Scorta esaurita",
+        _DUE: "Da assumere",
+    },
+    "en": {
+        CALENDAR_EVENT_TAKEN: "Taken",
+        CALENDAR_EVENT_MISSED: "Missed",
+        CALENDAR_EVENT_UNANSWERED: "No answer",
+        CALENDAR_EVENT_RESTOCK: "Restock",
+        CALENDAR_EVENT_DEPLETED: "Out of stock",
+        _DUE: "Due",
+    },
 }
+
+
+def _label(hass: HomeAssistant, key: str) -> str:
+    language = (hass.config.language or "en").lower()
+    labels = _EVENT_LABELS["it" if language.startswith("it") else "en"]
+    return labels.get(key, key)
 
 _UPCOMING_DURATION = timedelta(minutes=15)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddEntitiesCallback) -> None:
+# Everything is computed locally from NeoPill's own store: no limit needed.
+PARALLEL_UPDATES = 0
+
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     store: NeoPillStore = entry.runtime_data.store
     scheduler = entry.runtime_data.scheduler
 
@@ -99,7 +122,11 @@ class PatientCalendarEntity(CalendarEntity):
         if not upcoming:
             return None
         due_at, med_name = min(upcoming, key=lambda item: item[0])
-        return CalendarEvent(start=due_at, end=due_at + _UPCOMING_DURATION, summary=f"Da assumere: {med_name}")
+        return CalendarEvent(
+            start=due_at,
+            end=due_at + _UPCOMING_DURATION,
+            summary=f"{_label(self.hass, _DUE)}: {med_name}",
+        )
 
     async def async_get_events(
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
@@ -110,7 +137,7 @@ class PatientCalendarEntity(CalendarEntity):
             CalendarEvent(
                 start=e["timestamp"],
                 end=e["timestamp"] + _UPCOMING_DURATION,
-                summary=f"{_EVENT_LABELS.get(e['type'], e['type'])}: {e['medication_name']}",
+                summary=f"{_label(hass, e['type'])}: {e['medication_name']}",
             )
             for e in events
         ]
@@ -121,7 +148,7 @@ class PatientCalendarEntity(CalendarEntity):
                     CalendarEvent(
                         start=due_at,
                         end=due_at + _UPCOMING_DURATION,
-                        summary=f"Da assumere: {medication.name}",
+                        summary=f"{_label(hass, _DUE)}: {medication.name}",
                     )
                 )
         calendar_events.sort(key=lambda e: e.start)

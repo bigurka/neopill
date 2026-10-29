@@ -1,0 +1,9 @@
+{
+  "services": {
+    "assumi_farmaco": { "service": "mdi:pill" },
+    "segna_non_assunta": { "service": "mdi:pill-off" },
+    "rifornisci_farmaco": { "service": "mdi:package-variant-plus" },
+    "segna_rifornimento_notificato": { "service": "mdi:bell-check" },
+    "correggi_assunzione": { "service": "mdi:undo-variant" }
+  }
+}

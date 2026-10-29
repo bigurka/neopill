@@ -5,6 +5,12 @@ function send(hass, msg) {
   return hass.connection.sendMessagePromise(msg);
 }
 
+// Per (user, patient) roles - mirror of const.py. Each patient from listPatients()
+// carries the viewer's own role in `role` ("admin" for HA administrators).
+export const ASSIGNABLE_ROLES = ["assisted", "patient", "caregiver", "doctor"];
+export const canAct = (role) => ["patient", "caregiver", "doctor", "admin"].includes(role);
+export const canEdit = (role) => ["doctor", "admin"].includes(role);
+
 export const api = {
   listPatients: (hass) => send(hass, { type: "neopill/patients/list" }).then((r) => r.patients),
   addPatient: (hass, name) =>
@@ -51,4 +57,14 @@ export const api = {
       end,
       ...(patient_id ? { patient_id } : {}),
     }).then((r) => r.events),
+
+  me: (hass) => send(hass, { type: "neopill/me" }),
+  listUsers: (hass) => send(hass, { type: "neopill/users/list" }).then((r) => r.users),
+  importUsers: (hass) => send(hass, { type: "neopill/users/import" }).then((r) => r.patients),
+  setAccess: (hass, patient_id, user_id, role) =>
+    send(hass, { type: "neopill/access/set", patient_id, user_id, role }).then((r) => r.patient),
+  linkUser: (hass, patient_id, user_id) =>
+    send(hass, { type: "neopill/patients/link_user", patient_id, user_id }).then((r) => r.patient),
+  updateSettings: (hass, settings) =>
+    send(hass, { type: "neopill/settings/update", ...settings }).then((r) => r.settings),
 };
