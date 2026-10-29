@@ -89,3 +89,20 @@ segna_rifornimento_notificato:
       required: false
       selector:
         text:
+
+correggi_assunzione:
+  name: Correggi assunzione in non assunta
+  description: >-
+    Trasforma una dose già registrata come "assunta" in "non assunta",
+    ripristinando la quantità di scorta che era stata scalata. Pensato per
+    correggere un'azione massiva ("Assumi tutti") che ha incluso per errore
+    un farmaco già a scorta zero, impossibile da deselezionare prima di
+    confermare. L'ID evento arriva dalla notifica di scorta esaurita
+    (evento "neopill_stock_depleted").
+  fields:
+    event_id:
+      name: Evento
+      description: ID dell'evento di assunzione da correggere.
+      required: true
+      selector:
+        text:

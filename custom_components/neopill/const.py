@@ -10,6 +10,11 @@ PANEL_TITLE = "NeoPill"
 PANEL_ICON = "mdi:pill-multiple"
 
 EVENT_DOSE_DUE = "neopill_dose_due"
+# Fired whenever a "taken" intake brings a medication's stock to zero - lets an
+# automation (see the neopill_stock_depleted_notice blueprint) offer a quick
+# "actually, undo that" button, especially useful after a bulk "take all" action
+# where an individual medication can't be deselected beforehand.
+EVENT_STOCK_DEPLETED = "neopill_stock_depleted"
 
 SIGNAL_PATIENT_ADDED = f"{DOMAIN}_patient_added"
 SIGNAL_PATIENT_UPDATED = f"{DOMAIN}_patient_updated"
