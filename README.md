@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.17.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.17.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -319,7 +319,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.17.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.17.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
@@ -356,7 +356,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.17.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.17.1, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -647,7 +647,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.17.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.17.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
 HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), a Lovelace card plus

@@ -13,7 +13,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .access import async_import_ha_users
 from .const import DOMAIN, SIGNAL_MEDICATION_REMOVED, SIGNAL_PATIENT_REMOVED
 from .coordinator import DoseScheduler
-from .entity import patient_hub_identifier
+from .entity import find_device, patient_hub_identifier
 from .migrations import async_cleanup_legacy_entities
 from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services
@@ -67,7 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> b
 
     @callback
     def _remove_medication_device(medication_id: str) -> None:
-        device = device_registry.async_get_device(identifiers={(DOMAIN, medication_id)})
+        device = find_device(hass, entry.entry_id, (DOMAIN, medication_id))
         if device is not None:
             device_registry.async_remove_device(device.id)
 
@@ -77,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoPillConfigEntry) -> b
 
     @callback
     def _remove_patient_device(patient_id: str) -> None:
-        device = device_registry.async_get_device(identifiers={patient_hub_identifier(patient_id)})
+        device = find_device(hass, entry.entry_id, patient_hub_identifier(patient_id))
         if device is not None:
             device_registry.async_remove_device(device.id)
 

@@ -1,7 +1,8 @@
 """Shared entity helpers for NeoPill medication and patient devices."""
 from __future__ import annotations
 
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
@@ -10,6 +11,10 @@ from homeassistant.util import slugify
 from .const import DOMAIN, PANEL_URL_PATH, SIGNAL_MEDICATION_UPDATED
 from .models import Medication, Patient
 from .storage import NeoPillStore
+
+# HA 2026.9 replaced DeviceInfo's via_device (the parent's identifier) with
+# via_device_id (the parent's registry id); via_device stops working in 2027.8.
+_HAS_VIA_DEVICE_ID = "via_device_id" in DeviceInfo.__optional_keys__
 
 
 def patient_hub_identifier(patient_id: str) -> tuple[str, str]:
@@ -37,19 +42,45 @@ def patient_panel_url(patient_id: str) -> str:
     return f"homeassistant://{PANEL_URL_PATH}?patient={patient_id}"
 
 
-def medication_device_info(medication: Medication, patient: Patient | None) -> DeviceInfo:
+def find_device(
+    hass: HomeAssistant, entry_id: str, identifier: tuple[str, str]
+) -> dr.DeviceEntry | None:
+    """Look up one of this entry's devices by identifier.
+
+    HA 2026.9 added async_get_device_by_identifier; async_get_device(identifiers=...)
+    is deprecated and stops working in 2027.8. Older HA only has the latter.
+    """
+    registry = dr.async_get(hass)
+    if hasattr(registry, "async_get_device_by_identifier"):
+        return registry.async_get_device_by_identifier(identifier, entry_id)
+    return registry.async_get_device(identifiers={identifier})
+
+
+def medication_device_info(
+    hass: HomeAssistant, entry_id: str, medication: Medication, patient: Patient | None
+) -> DeviceInfo:
     """DeviceInfo for a medication's device - name includes the patient to
     disambiguate same-named medications across different patients."""
     patient_name = patient.name if patient else "?"
-    info = DeviceInfo(
-        identifiers={(DOMAIN, medication.id)},
-        name=f"{medication.name} ({patient_name})",
-        manufacturer="NeoPill",
-        model="Farmaco",
-    )
+    info = {
+        "identifiers": {(DOMAIN, medication.id)},
+        "name": f"{medication.name} ({patient_name})",
+        "manufacturer": "NeoPill",
+        "model": "Farmaco",
+    }
     if patient is not None:
-        info["via_device"] = patient_hub_identifier(patient.id)
-    return info
+        if _HAS_VIA_DEVICE_ID:
+            # via_device_id must name a registered device, but the medication's
+            # entities may be added before the patient hub's: create it first.
+            hub = find_device(hass, entry_id, patient_hub_identifier(patient.id))
+            if hub is None:
+                hub = dr.async_get(hass).async_get_or_create(
+                    config_entry_id=entry_id, **patient_hub_device_info(patient)
+                )
+            info["via_device_id"] = hub.id
+        else:
+            info["via_device"] = patient_hub_identifier(patient.id)
+    return DeviceInfo(**info)
 
 
 def medication_entity_id(
@@ -91,7 +122,9 @@ class NeoPillMedicationEntity(Entity):
         if medication is None:
             return None
         patient = self._store.patients.get(medication.patient_id)
-        return medication_device_info(medication, patient)
+        return medication_device_info(
+            self.hass, self.platform.config_entry.entry_id, medication, patient
+        )
 
     @property
     def available(self) -> bool:
