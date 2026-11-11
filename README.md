@@ -265,10 +265,12 @@ come pronte** per i farmaci da rifornire del paziente e manda una notifica al te
 sono pronte: puoi passare in farmacia", toccandola si apre la pagina scelta). Nella dashboard, sotto
 "Da ordinare", compare **"✅ ricetta pronta dal 09/11 12:37"** finché non registri la confezione arrivata.
 
-Le email si leggono con l'integrazione [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail): in
-Impostazioni → Dispositivi e servizi → MS365 Mail aggiungi un **sensore posta** con, nel campo **From**,
-l'indirizzo del mittente (es. `pazienti@eumedweb.com`); per cercare parole anche nel testo dell'email attiva
-**Show body**. Nel blueprint scegli quel sensore, il sensore `restock_reminder` del paziente, i mittenti
+Le email si leggono con l'integrazione [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail), che per
+ogni account ha un **sensore posta** con le ultime email arrivate. Nelle sue opzioni (Impostazioni →
+Dispositivi e servizi → MS365 Mail → **ingranaggio**) lascia **vuoto** il filtro sul mittente ("Only
+retrieve emails from this email address": i mittenti li sceglie il blueprint), metti "Max number of
+items" a **10** circa e, per cercare parole anche nel testo dell'email, attiva "Show body on entity".
+Nel blueprint scegli quel sensore, il sensore `restock_reminder` del paziente, i mittenti
 che confermano (si può aggiungere anche quello della segreteria del medico) ed eventuali parole da cercare.
 Contano solo le email degli ultimi 3 giorni arrivate dopo l'ultima volta che l'automazione è scattata.
 Lo stesso si può fare da qualsiasi automazione con il servizio `neopill.segna_ricette_pronte`.
@@ -656,10 +658,11 @@ notification ("Marco's prescriptions are ready: you can go to the pharmacy"; tap
 page). In the dashboard, under "To reorder", **"✅ prescription ready since 09/11 12:37"** shows until you
 record the package as arrived.
 
-Emails are read through the [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail) integration: under
-Settings → Devices & services → MS365 Mail add a **mail sensor** with the sender's address in the **From**
-field (e.g. `pazienti@eumedweb.com`); to match words in the email text too, enable **Show body**. In the
-blueprint pick that sensor, the patient's `restock_reminder` sensor, the confirming senders (the doctor's
+Emails are read through the [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail) integration, which
+has one **mail sensor** per account listing the latest emails. In its options (Settings → Devices &
+services → MS365 Mail → **gear**) leave the sender filter **empty** ("Only retrieve emails from this email
+address": the blueprint picks the senders), set "Max number of items" to about **10** and, to match words
+in the email text too, enable "Show body on entity". In the blueprint pick that sensor, the patient's `restock_reminder` sensor, the confirming senders (the doctor's
 office can be added too) and optional words to look for. Only emails from the last 3 days received after
 the automation last fired count. Any automation can do the same with the `neopill.segna_ricette_pronte`
 service.

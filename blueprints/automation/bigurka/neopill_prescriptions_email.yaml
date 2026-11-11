@@ -7,10 +7,12 @@ blueprint:
     rifornire del paziente - la dashboard lo mostra in "Da ordinare" finché
     non registri la confezione arrivata - e manda una notifica al telefono.
     Legge le email tramite il sensore posta dell'integrazione MS365 Mail
-    (da HACS): crealo filtrato sul mittente della conferma (Impostazioni →
-    Dispositivi e servizi → MS365 Mail → aggiungi un sensore posta, campo
-    "From"). Conta solo le email degli ultimi 3 giorni arrivate dopo
-    l'ultima volta che l'automazione è scattata.
+    (da HACS), che mostra le ultime email arrivate: nelle sue opzioni
+    (Impostazioni → Dispositivi e servizi → MS365 Mail → ingranaggio)
+    lascia vuoto il filtro sul mittente - i mittenti li sceglie questo
+    blueprint - e imposta "Max number of items" a 10 circa. Conta solo le
+    email degli ultimi 3 giorni arrivate dopo l'ultima volta che
+    l'automazione è scattata.
   domain: automation
   author: bigurka
   source_url: https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_prescriptions_email.yaml
@@ -25,8 +27,9 @@ blueprint:
     mail_sensors:
       name: Sensori posta da controllare
       description: >-
-        Uno o più sensori posta di MS365 Mail. Per riconoscere anche le
-        parole nel testo dell'email, attiva "Show body" nel sensore.
+        Il sensore posta di MS365 Mail (uno per account, es.
+        sensor.‹account›_mail). Per riconoscere anche le parole nel testo
+        dell'email, attiva "Show body on entity" nelle sue opzioni.
       selector:
         entity:
           multiple: true
