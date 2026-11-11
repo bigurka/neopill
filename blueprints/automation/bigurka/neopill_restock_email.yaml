@@ -7,9 +7,11 @@ blueprint:
     promemoria. Con "Richiedi conferma prima dell'invio" attivo
     (consigliato all'inizio, per verificare che tutto sia impostato
     correttamente), la notifica include i pulsanti "Invia email"/"Annulla"
-    e l'email - l'azione che hai configurato tu stesso, qualsiasi servizio
-    disponibile in Home Assistant coi suoi campi specifici - parte solo
-    alla conferma esplicita. Con "Richiedi conferma" disattivato, la
+    e mostra i destinatari; l'email parte solo alla conferma esplicita.
+    L'email viene inviata con Microsoft 365 / Outlook (integrazione MS365
+    Mail) ai destinatari dei campi To/Cc/Bcc, oppure - disattivando "Usa i
+    destinatari To/Cc/Bcc" - con un'azione configurata da te, qualsiasi
+    servizio email disponibile in Home Assistant. Con "Richiedi conferma" disattivato, la
     notifica resta solo informativa e l'email parte subito, in automatico
     (comodo quando ormai serve solo per passare in farmacia). Non ripete la
     notifica ogni giorno per lo stesso gruppo di farmaci già segnalato: si
@@ -56,24 +58,49 @@ blueprint:
       name: Nome destinatario
       description: >-
         Il nome della persona a cui è indirizzata l'email (es. "Elisabetta"),
-        da usare nel saluto del messaggio. Richiamalo nel tuo template con
-        "{{ recipient_name }}".
+        da usare nel saluto del messaggio. Con un'azione personalizzata
+        richiamalo con "{{ recipient_name }}".
       default: ""
       selector:
         text:
     sender_name:
       name: Nome mittente
       description: >-
-        Il nome di chi firma l'email (es. "Marco Rossato"). Richiamalo nel
-        tuo template con "{{ sender_name }}".
+        Il nome di chi firma l'email (es. "Marco Rossato"). Con un'azione
+        personalizzata richiamalo con "{{ sender_name }}".
       default: ""
+      selector:
+        text:
+    use_blueprint_recipients:
+      name: Usa i destinatari To/Cc/Bcc
+      description: >-
+        Se attivo (consigliato), il blueprint invia lui stesso l'email con
+        Microsoft 365 / Outlook ai destinatari dei campi To, Cc e Bcc qui
+        sotto: non serve configurare nessuna azione. Se disattivato, usa
+        l'"Azione di invio email personalizzata" in fondo.
+      default: true
+      selector:
+        boolean:
+    ms365_mail_sensor:
+      name: Account Microsoft 365 / Outlook
+      description: >-
+        Il sensore email dell'integrazione MS365 Mail (da HACS) con cui
+        inviare l'email. Serve solo con "Usa i destinatari To/Cc/Bcc" attivo.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          integration: ms365_mail
+    email_subject:
+      name: Oggetto dell'email
+      default: Rifornimento farmaci
       selector:
         text:
     email_to:
       name: "Destinatari (To:)"
       description: >-
-        Uno o più indirizzi email separati da virgola. Richiamali nel campo
-        destinatari del tuo servizio email con "{{ email_to }}" (elenco di
+        Uno o più indirizzi email separati da virgola. Con un'azione
+        personalizzata richiamali con "{{ email_to }}" (elenco di
         indirizzi) o "{{ email_to_text }}" (testo separato da virgole).
       default: ""
       selector:
@@ -81,27 +108,31 @@ blueprint:
     email_cc:
       name: "Copia (Cc:)"
       description: >-
-        Facoltativo. Indirizzi separati da virgola; nel servizio email usa
-        "{{ email_cc }}" (elenco) o "{{ email_cc_text }}" (testo).
+        Facoltativo. Indirizzi separati da virgola. Microsoft 365 non
+        gestisce il Cc dall'automazione: questi indirizzi ricevono la stessa
+        email dei destinatari To e sono visibili a tutti, come in un Cc.
+        Con un'azione personalizzata usa "{{ email_cc }}" (elenco) o
+        "{{ email_cc_text }}" (testo).
       default: ""
       selector:
         text:
     email_bcc:
       name: "Copia nascosta (Bcc:)"
       description: >-
-        Facoltativo. Indirizzi separati da virgola; nel servizio email usa
-        "{{ email_bcc }}" (elenco) o "{{ email_bcc_text }}" (testo). Non
-        tutti i servizi supportano Cc/Bcc (es. notify.smtp no,
-        ms365_mail sì).
+        Facoltativo. Indirizzi separati da virgola. Ricevono una seconda
+        email identica, inviata solo a loro: gli altri destinatari non li
+        vedono, come in un Bcc. Con un'azione personalizzata usa
+        "{{ email_bcc }}" (elenco) o "{{ email_bcc_text }}" (testo).
       default: ""
       selector:
         text:
     email_action:
-      name: Azione di invio email
+      name: Azione di invio email personalizzata
       description: >-
-        L'azione da eseguire per inviare l'email (es. ms365_mail.mail_send,
-        notify.smtp, notify.gmail o qualsiasi altro servizio email
-        disponibile in Home Assistant). Scegli il servizio e compila i
+        Usata solo con "Usa i destinatari To/Cc/Bcc" disattivato.
+        L'azione da eseguire per inviare l'email (es. notify.smtp,
+        notify.gmail o qualsiasi altro servizio email disponibile in Home
+        Assistant). Scegli il servizio e compila i
         suoi campi come faresti in una normale automazione (oggetto, ecc.).
         Per i destinatari usa "{{ email_to }}", "{{ email_cc }}" e
         "{{ email_bcc }}" (vedi i campi To/Cc/Bcc sopra). Nel campo dove va
@@ -109,6 +140,7 @@ blueprint:
         "{{ testo }}", "{{ recipient_name }}" e "{{ sender_name }}" per
         includere rispettivamente l'elenco dei farmaci, il nome del
         destinatario e il nome del mittente.
+      default: []
       selector:
         action: {}
     confirm_timeout_minutes:
@@ -147,7 +179,18 @@ variables:
   email_to: "{{ email_to_text.split(',') | map('trim') | reject('eq', '') | list }}"
   email_cc: "{{ email_cc_text.split(',') | map('trim') | reject('eq', '') | list }}"
   email_bcc: "{{ email_bcc_text.split(',') | map('trim') | reject('eq', '') | list }}"
+  use_blueprint_recipients: !input use_blueprint_recipients
+  ms365_mail_sensor: !input ms365_mail_sensor
+  email_subject: !input email_subject
   testo: "{{ state_attr(restock_sensor, 'testo') }}"
+  email_message: >-
+    Buongiorno{{ ' ' ~ recipient_name if recipient_name else '' }},{{ '\n\n' ~ testo }}{{ '\n\n' ~ sender_name if sender_name else '' }}
+  # Shown in the push notification, so the recipients can be checked before confirming.
+  recipients_summary: >-
+    {{ ((['A: ' ~ email_to | join(', ')] if email_to else [])
+       + (['Cc: ' ~ email_cc | join(', ')] if email_cc else [])
+       + (['Ccn: ' ~ email_bcc | join(', ')] if email_bcc else []))
+    | join('\n') }}
   patient_id: "{{ state_attr(restock_sensor, 'patient_id') }}"
 
 actions:
@@ -155,7 +198,7 @@ actions:
     data:
       title: "Promemoria rifornimento farmaci"
       message: >-
-        {{ testo }}{{ '\n\nEmail inviata automaticamente.' if not require_confirmation else '' }}
+        {{ testo }}{{ '\n\n' ~ recipients_summary if use_blueprint_recipients and recipients_summary else '' }}{{ '\n\nEmail inviata automaticamente.' if not require_confirmation else '' }}
       data:
         tag: "neopill_restock_{{ restock_sensor }}"
         actions: >-
@@ -184,6 +227,36 @@ actions:
         continue_on_timeout: true
       - if:
           - condition: template
-            value_template: "{{ wait.trigger is not none and wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
-        then: !input email_action
+            value_template: "{{ wait.trigger is none or not wait.trigger.event.data.action.startswith('NEOPILL_INVIA_EMAIL_') }}"
+        then:
+          - stop: Invio email annullato o non confermato
+  - if:
+      - condition: template
+        value_template: "{{ use_blueprint_recipients }}"
+    then:
+      # MS365 Mail has no Cc/Bcc: Cc goes with To (visible to all), Bcc gets its own copy.
+      - if:
+          - condition: template
+            value_template: "{{ (email_to + email_cc) | count > 0 }}"
+        then:
+          - action: ms365_mail.mail_send
+            target:
+              entity_id: "{{ ms365_mail_sensor }}"
+            data:
+              subject: "{{ email_subject }}"
+              message: "{{ email_message }}"
+              to: "{{ email_to + email_cc }}"
+              message_is_html: false
+      - if:
+          - condition: template
+            value_template: "{{ email_bcc | count > 0 }}"
+        then:
+          - action: ms365_mail.mail_send
+            target:
+              entity_id: "{{ ms365_mail_sensor }}"
+            data:
+              subject: "{{ email_subject }}"
+              message: "{{ email_message }}"
+              to: "{{ email_bcc }}"
+              message_is_html: false
     else: !input email_action

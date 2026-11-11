@@ -199,21 +199,33 @@ include i pulsanti "Invia email"/"Annulla" e l'email parte solo alla conferma es
 notifica resta solo informativa e l'email parte subito, in automatico (comodo quando ormai il flusso serve
 solo come promemoria per passare in farmacia).
 
-L'azione di invio email è **completamente configurabile**: a differenza di un campo di testo fisso, puoi
-scegliere qualsiasi servizio disponibile in Home Assistant — non solo `notify.*` (es. l'integrazione nativa
-`smtp`, Gmail), ma anche servizi con uno schema di campi proprio, come `ms365_mail.mail_send` — e
-compilarne i campi reali (destinatari, oggetto, corpo, ecc.) come faresti in una normale automazione. Nel
-campo dove va il testo del messaggio, in modalità YAML, usa i modelli:
+**Invio con Microsoft 365 / Outlook (predefinito).** Con **"Usa i destinatari To/Cc/Bcc"** attivo, la
+blueprint invia lei stessa l'email con l'integrazione [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail)
+(da HACS): basta scegliere l'**account** (il sensore email di MS365 Mail), l'**oggetto** e compilare i campi
+**To:**, **Cc:** e **Bcc:** (più indirizzi separati da virgola). Il testo è:
+
+```
+Buongiorno <Nome destinatario>,
+
+<elenco dei farmaci da rifornire>
+
+<Nome mittente>
+```
+
+Microsoft 365 non permette di impostare Cc e Bcc dall'automazione, quindi:
+
+- **To** e **Cc** ricevono la stessa email e vedono tutti gli indirizzi (come in un Cc);
+- **Bcc** riceve una seconda email identica, inviata solo a quegli indirizzi (gli altri non li vedono);
+- con la conferma attiva, la notifica sul telefono mostra prima i destinatari (`A:`, `Cc:`, `Ccn:`).
+
+**Azione personalizzata.** Disattivando "Usa i destinatari To/Cc/Bcc", la blueprint esegue invece l'**Azione
+di invio email personalizzata**: qualsiasi servizio disponibile in Home Assistant (es. `notify.smtp`, Gmail),
+compilato come in una normale automazione. In modalità YAML puoi usare i modelli:
 
 - `{{ testo }}` — l'elenco dei farmaci da rifornire, già formattato (una riga per farmaco)
-- `{{ recipient_name }}` — il nome del destinatario, impostato nei campi della blueprint
-- `{{ sender_name }}` — il nome del mittente/firma, impostato nei campi della blueprint
-
-I destinatari si scrivono nei campi **To:**, **Cc:** e **Bcc:** della blueprint (più indirizzi separati da
-virgola) e si richiamano nei campi del servizio email con `{{ email_to }}`, `{{ email_cc }}` e
-`{{ email_bcc }}` (elenchi di indirizzi), oppure `{{ email_to_text }}`, `{{ email_cc_text }}` e
-`{{ email_bcc_text }}` se il servizio vuole un testo separato da virgole. Cc e Bcc funzionano solo se il
-servizio scelto li supporta (es. `ms365_mail.mail_send` sì, `notify.smtp` no).
+- `{{ recipient_name }}` e `{{ sender_name }}` — nome del destinatario e del mittente
+- `{{ email_to }}`, `{{ email_cc }}`, `{{ email_bcc }}` — i destinatari come elenchi di indirizzi, oppure
+  `{{ email_to_text }}`, `{{ email_cc_text }}`, `{{ email_bcc_text }}` come testo separato da virgole
 
 ### `neopill_stock_depleted_notice.yaml` — Avviso scorta esaurita durante un'assunzione
 
@@ -529,21 +541,33 @@ notification includes "Send email"/"Cancel" buttons and the email only goes out 
 disabling it makes the notification purely informational and the email send immediately, automatically
 (handy once the flow is trusted and only needed as a pharmacy-visit reminder).
 
-The email-sending action is **fully configurable**: instead of a fixed text field, you pick any service
-available in Home Assistant - not just `notify.*` (e.g. the native `smtp` integration, Gmail), but also
-services with their own field schema, like `ms365_mail.mail_send` - and fill in its real fields
-(recipients, subject, body, etc.) just like in a normal automation. In the field that holds the message
-text, in YAML mode, use these templates:
+**Sending with Microsoft 365 / Outlook (default).** With **"Use the To/Cc/Bcc recipients"** enabled, the
+blueprint sends the email itself through the [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail)
+integration (from HACS): just pick the **account** (the MS365 Mail email sensor) and the **subject**, and fill in
+the **To:**, **Cc:** and **Bcc:** fields (several addresses separated by commas). The text is:
+
+```
+Buongiorno <Recipient name>,
+
+<list of medications to reorder>
+
+<Sender name>
+```
+
+Microsoft 365 doesn't allow setting Cc and Bcc from an automation, so:
+
+- **To** and **Cc** get the same email and see every address (like a Cc);
+- **Bcc** gets a second, identical email sent only to those addresses (the others don't see them);
+- with confirmation enabled, the phone notification shows the recipients first (`A:`, `Cc:`, `Ccn:`).
+
+**Custom action.** With "Use the To/Cc/Bcc recipients" disabled, the blueprint runs the **custom email
+action** instead: any service available in Home Assistant (e.g. `notify.smtp`, Gmail), filled in as in a
+normal automation. In YAML mode you can use these templates:
 
 - `{{ testo }}` - the list of medications to reorder, already formatted (one line per medication)
-- `{{ recipient_name }}` - the recipient's name, set in the blueprint's own fields
-- `{{ sender_name }}` - the sender/signature name, set in the blueprint's own fields
-
-Recipients go in the blueprint's **To:**, **Cc:** and **Bcc:** fields (several addresses separated by
-commas) and are used in the email service's fields as `{{ email_to }}`, `{{ email_cc }}` and
-`{{ email_bcc }}` (lists of addresses), or `{{ email_to_text }}`, `{{ email_cc_text }}` and
-`{{ email_bcc_text }}` when the service wants comma-separated text. Cc and Bcc only work if the chosen
-service supports them (e.g. `ms365_mail.mail_send` does, `notify.smtp` doesn't).
+- `{{ recipient_name }}` and `{{ sender_name }}` - recipient and sender names
+- `{{ email_to }}`, `{{ email_cc }}`, `{{ email_bcc }}` - the recipients as lists of addresses, or
+  `{{ email_to_text }}`, `{{ email_cc_text }}`, `{{ email_bcc_text }}` as comma-separated text
 
 ### `neopill_stock_depleted_notice.yaml` — stock-depleted notice during an intake
 
