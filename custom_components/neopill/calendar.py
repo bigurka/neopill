@@ -41,7 +41,7 @@ _EVENT_LABELS = {
     "it": {
         CALENDAR_EVENT_TAKEN: "Assunta",
         CALENDAR_EVENT_MISSED: "Non assunta",
-        CALENDAR_EVENT_UNANSWERED: "Nessuna risposta",
+        CALENDAR_EVENT_UNANSWERED: "Dimenticata",
         CALENDAR_EVENT_RESTOCK: "Rifornimento",
         CALENDAR_EVENT_DEPLETED: "Scorta esaurita",
         _DUE: "Da assumere",
@@ -49,7 +49,7 @@ _EVENT_LABELS = {
     "en": {
         CALENDAR_EVENT_TAKEN: "Taken",
         CALENDAR_EVENT_MISSED: "Missed",
-        CALENDAR_EVENT_UNANSWERED: "No answer",
+        CALENDAR_EVENT_UNANSWERED: "Forgotten",
         CALENDAR_EVENT_RESTOCK: "Restock",
         CALENDAR_EVENT_DEPLETED: "Out of stock",
         _DUE: "Due",

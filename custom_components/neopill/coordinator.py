@@ -214,6 +214,7 @@ class DoseScheduler:
         self._due_at[medication.id] = occurrence
         if occurrence <= dt_util.now():
             self._set_due(medication.id, True)
+            self._schedule_supersede(medication)
         else:
             self._set_due(medication.id, False)
             self._cancel_timers[medication.id] = async_track_point_in_time(
@@ -225,8 +226,55 @@ class DoseScheduler:
         def _due_callback(_now: datetime) -> None:
             self._cancel_timers.pop(medication_id, None)
             self._set_due(medication_id, True)
+            if (medication := self._store.medications.get(medication_id)) is not None:
+                self._schedule_supersede(medication)
 
         return _due_callback
+
+    # ---- Superseding a forgotten dose ----
+
+    def _schedule_supersede(self, medication: Medication) -> None:
+        """While a dose is due, arm a timer for the medication's next occurrence.
+
+        A dose nobody answered must not hold back the next one (e.g. the 06:00 dose
+        blocking the 18:00 one until midnight): when the next occurrence arrives,
+        the old dose is recorded as forgotten ("unanswered") and the new one
+        becomes due. Uses the same timer slot as the due callback - only one of the
+        two is ever pending.
+        """
+        due_at = self._due_at.get(medication.id)
+        if due_at is None:
+            return
+        next_at = _next_occurrence(medication.dose_schedule, due_at)
+        if next_at is None:
+            return
+        cancel = self._cancel_timers.pop(medication.id, None)
+        if cancel is not None:
+            cancel()
+        if next_at <= dt_util.now():
+            self._hass.async_create_task(self._async_supersede(medication.id, due_at, next_at))
+            return
+
+        @callback
+        def _supersede_callback(_now: datetime) -> None:
+            self._cancel_timers.pop(medication.id, None)
+            self._hass.async_create_task(self._async_supersede(medication.id, due_at, next_at))
+
+        self._cancel_timers[medication.id] = async_track_point_in_time(
+            self._hass, _supersede_callback, next_at
+        )
+
+    async def _async_supersede(self, medication_id: str, due_at: datetime, next_at: datetime) -> None:
+        # Answered (or changed) in the meantime: nothing to supersede.
+        if not self.is_due(medication_id) or self._due_at.get(medication_id) != due_at:
+            return
+        _LOGGER.debug("Dose of %s due at %s forgotten, next one is due", medication_id, due_at)
+        await self._store.async_record_unanswered(medication_id, scheduled_for=due_at)
+        medication = self._store.medications.get(medication_id)
+        if medication is not None:
+            # The record above recomputed from "now", which already lies past the
+            # next slot: restart from just before it so that slot becomes due.
+            self._recompute(medication, reference=next_at - timedelta(seconds=1))
 
     def _set_due(self, medication_id: str, is_due: bool) -> None:
         changed = self._is_due.get(medication_id) != is_due
@@ -253,6 +301,12 @@ class DoseScheduler:
                 _LOGGER.debug("Safety sweep found overdue dose for %s", medication_id)
                 self._cancel_timers.pop(medication_id, lambda: None)()
                 self._set_due(medication_id, True)
+                if (medication := self._store.medications.get(medication_id)) is not None:
+                    self._schedule_supersede(medication)
+            elif self._is_due.get(medication_id) and medication_id not in self._cancel_timers:
+                # Supersede timer lost (e.g. scheduled before a time jump): re-arm it.
+                if (medication := self._store.medications.get(medication_id)) is not None:
+                    self._schedule_supersede(medication)
 
     @callback
     def _handle_midnight(self, _now: datetime) -> None:
@@ -265,7 +319,7 @@ class DoseScheduler:
         Without this, a forgotten dose just sits "due" forever once the reminder
         automation's own repeat/retry budget runs out, since nothing ever makes its
         dose_due binary_sensor toggle off and back on again for automations to react
-        to. Recording it here does two things: leaves an explicit "nessuna risposta"
+        to. Recording it here does two things: leaves an explicit "dimenticata" (forgotten)
         entry in the calendar (distinct from an explicit "missed"), and - via the
         normal SIGNAL_INTAKE_RECORDED -> _on_intake_recorded path - advances the
         schedule to the next real occurrence, which naturally toggles the sensor.
@@ -279,6 +333,10 @@ class DoseScheduler:
             if dt_util.as_local(due_at).date() >= today:
                 continue
             _LOGGER.debug("No response for overdue dose of %s, resolving at day boundary", medication_id)
-            self._hass.async_create_task(
-                self._store.async_record_unanswered(medication_id, scheduled_for=due_at)
-            )
+            self._hass.async_create_task(self._async_resolve_unanswered(medication_id, due_at))
+
+    async def _async_resolve_unanswered(self, medication_id: str, due_at: datetime) -> None:
+        # The supersede path may have resolved this very dose first (both run at
+        # startup): record it only if it's still the one pending.
+        if self.is_due(medication_id) and self._due_at.get(medication_id) == due_at:
+            await self._store.async_record_unanswered(medication_id, scheduled_for=due_at)

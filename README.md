@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.18.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.18.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -54,8 +54,11 @@ paziente e un dispositivo HA per ogni farmaco.
   farmaco da solo, non registra due volte la stessa dose). Creati/rimossi automaticamente quando aggiungi,
   modifichi o elimini un farmaco.
 - **Dosi di oggi**: un sensore per paziente (`sensor.‹paziente›_today_doses`) con l'elenco di tutte le dosi
-  della giornata (e di ieri) e cosa ne è stato — presa alle…, da prendere, più tardi, saltata, nessuna
-  risposta — usato dalla dashboard automatica per mostrare cosa è già stato preso.
+  della giornata (e di ieri) e cosa ne è stato — presa alle…, da prendere, più tardi, saltata, dimenticata
+  — usato dalla dashboard automatica per mostrare cosa è già stato preso.
+- **Dose dimenticata**: una dose non segnata non blocca la successiva. All'ora della dose successiva dello
+  stesso farmaco (o a mezzanotte) viene registrata come **dimenticata** e la nuova diventa "da prendere";
+  "non assunta" resta solo quando la segni tu.
 - **Finestra ideale di riordino, per paziente**: due soglie (giorni minimi/massimi, editabili dalla toolbar
   del pannello) pensate per raggruppare più farmaci possibile in un'unica commissione — minimi = non
   aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di rifiuto del medico
@@ -176,9 +179,11 @@ Viene generata una pagina per ogni paziente che l'utente può vedere:
 - **Scorte**: per ogni farmaco "per 24 giorni · 24 rimaste", con ⚠️ quando sta finendo.
 
 Per chi assiste più pazienti (o ha il ruolo Operatore, Medico o Admin) c'è anche la pagina **Riepilogo**:
-per ogni paziente quante dosi sono da prendere, ultima presa e prossima dose, i pulsanti "Saltata" per le
-dosi dovute, i farmaci **da ordinare** con il pulsante "Arrivata una confezione", e le dosi saltate di
-**ieri**. Il Paziente assistito vede tutto ma i tocchi non registrano nulla.
+per ogni paziente quante dosi sono da prendere, ultima presa e prossima dose, i pulsanti "saltata" per le
+dosi dovute, i farmaci **da ordinare**, le dosi saltate o dimenticate di **ieri** e la sezione
+**Rifornimento**: un pulsante "+1 confezione" per ogni farmaco, sempre visibile, che mostra le compresse
+attuali — un tocco per ogni confezione arrivata (per quantità diverse, ad esempio compresse sfuse, usa il
+pannello). Il Paziente assistito vede tutto ma i tocchi non registrano nulla.
 
 Aggiungendo o eliminando un paziente o un farmaco dal pannello NeoPill, ricarica la dashboard per
 aggiornarla. Le card `custom:neopill-patient-card` e `custom:neopill-stock-card` restano disponibili per
@@ -356,7 +361,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.18.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.18.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
@@ -393,7 +398,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.18.0, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.18.1, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -424,8 +429,11 @@ patient and an HA device for each medication.
   time and **still due** (pressed twice, or after one medication was already taken on its own, it never
   logs the same dose twice). Created/removed automatically as you add, edit or delete a medication.
 - **Today's doses**: one sensor per patient (`sensor.‹patient›_today_doses`) listing every dose of the day
-  (and of yesterday) with what happened to it — taken at…, due, later, skipped, no answer — used by the
+  (and of yesterday) with what happened to it — taken at…, due, later, skipped, forgotten — used by the
   auto-generated dashboard to show what was already taken.
+- **Forgotten doses**: an unrecorded dose no longer holds back the next one. When the next dose of the same
+  medication is due (or at midnight) it is recorded as **forgotten** and the new one becomes due; "missed"
+  is only ever what you record yourself.
 - **Per-patient ideal reorder window**: two thresholds (min/max days, editable from the panel toolbar)
   meant to help you batch as many medications as possible into a single pharmacy trip — min = don't leave
   it any later (risk of running out), max = don't order too early (risk of the prescription being refused
@@ -545,9 +553,11 @@ It generates one page per patient the user can see:
 - **Stock**: "for 24 days · 24 left" per medication, with ⚠️ when it's running low.
 
 For whoever assists several patients (or has the Caregiver, Doctor or Admin role) there's also a
-**Summary** page: per patient, how many doses are due, last and next dose, "Skipped" buttons for the due
-doses, the medications **to reorder** with a "Package arrived" button, and **yesterday**'s missed doses.
-Assisted patients see everything, but their taps record nothing.
+**Summary** page: per patient, how many doses are due, last and next dose, "skipped" buttons for the due
+doses, the medications **to reorder**, **yesterday**'s skipped or forgotten doses and a **Restock**
+section: a "+1 package" button per medication, always shown, displaying the current stock - one tap per
+package that arrived (for other amounts, e.g. loose tablets, use the panel). Assisted patients see
+everything, but their taps record nothing.
 
 After adding or deleting a patient or a medication in the NeoPill panel, reload the dashboard to update
 it. The `custom:neopill-patient-card` and `custom:neopill-stock-card` cards remain available for
@@ -723,7 +733,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.18.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.18.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
 HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), a Lovelace card plus

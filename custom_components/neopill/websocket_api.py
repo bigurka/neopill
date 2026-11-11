@@ -632,6 +632,8 @@ async def ws_dashboard(
                     "name": medication.name,
                     "display_name": medication.display_name(),
                     "dose_amount": medication.dose_amount,
+                    "days_remaining": medication.days_remaining(),
+                    "package_size": medication.package_size,
                     "times": sorted(times),
                     "entities": {
                         key: entity_id(domain, f"{medication.id}_{key}")

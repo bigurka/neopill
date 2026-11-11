@@ -23,19 +23,20 @@ const TEXT = {
     confirm_one: "Hai preso {name}?",
     confirm_many: "Hai preso {names}?",
     confirm_missed: "Segnare {name} come NON presa?",
-    confirm_restock: "È arrivata una confezione di {name}?",
+    confirm_restock: "Aggiungere una confezione di {name}?",
     today: "Oggi",
     yesterday: "Ieri",
     stock: "Scorte",
     summary: "Riepilogo",
     to_reorder: "Da ordinare",
-    restock: "Arrivata una confezione: {name}",
-    skip: "Saltata: {name}",
+    restock: "{name} — +1 confezione",
+    restock_title: "Rifornimento: un tocco = una confezione",
+    skip: "{name} — saltata",
     no_doses: "Nessuna pastiglia programmata.",
     nothing_missed: "Nessuna dose saltata.",
     st_taken: "✅ presa alle {at}",
     st_missed: "❌ saltata",
-    st_unanswered: "❔ nessuna risposta",
+    st_unanswered: "❔ dimenticata",
     st_due: "⏰ da prendere",
     st_later: "più tardi",
     st_not_recorded: "– non segnata",
@@ -63,19 +64,20 @@ const TEXT = {
     confirm_one: "Did you take {name}?",
     confirm_many: "Did you take {names}?",
     confirm_missed: "Mark {name} as NOT taken?",
-    confirm_restock: "Did a package of {name} arrive?",
+    confirm_restock: "Add one package of {name}?",
     today: "Today",
     yesterday: "Yesterday",
     stock: "Stock",
     summary: "Summary",
     to_reorder: "To reorder",
-    restock: "Package arrived: {name}",
-    skip: "Skipped: {name}",
+    restock: "{name} — +1 package",
+    restock_title: "Restock: one tap = one package",
+    skip: "{name} — skipped",
     no_doses: "No doses scheduled.",
     nothing_missed: "No missed doses.",
     st_taken: "✅ taken at {at}",
     st_missed: "❌ skipped",
-    st_unanswered: "❔ no answer",
+    st_unanswered: "❔ forgotten",
     st_due: "⏰ to take",
     st_later: "later",
     st_not_recorded: "– not recorded",
@@ -157,6 +159,12 @@ function bigButton(entity, name, icon, tapAction, visibility) {
   };
   if (visibility) card.visibility = visibility;
   return card;
+}
+
+// Full-width, smaller button for the caregiver's actions: a tile cuts its label to one
+// line, which hid the medication name on a phone.
+function rowButton(entity, name, icon, tapAction, visibility) {
+  return { ...bigButton(entity, name, icon, tapAction, visibility), icon_height: "32px" };
 }
 
 const heading = (text, icon) => ({ type: "heading", heading: text, icon, heading_style: "title" });
@@ -301,47 +309,52 @@ function summaryView(lang, patients) {
     if (act) {
       for (const m of patient.medications) {
         if (!m.entities.dose_due || !m.entities.mark_missed) continue;
-        cards.push({
-          type: "tile",
-          entity: m.entities.mark_missed,
-          name: t(lang, "skip", { name: m.name }),
-          icon: "mdi:pill-off",
-          hide_state: true,
-          tap_action: pressAction(m.entities.mark_missed, t(lang, "confirm_missed", { name: m.name })),
-          hold_action: { action: "none" },
-          icon_tap_action: { action: "none" },
-          visibility: [isOn(m.entities.dose_due)],
-        });
+        cards.push(
+          rowButton(
+            m.entities.mark_missed,
+            t(lang, "skip", { name: m.name }),
+            "mdi:pill-off",
+            pressAction(m.entities.mark_missed, t(lang, "confirm_missed", { name: m.name })),
+            [isOn(m.entities.dose_due)]
+          )
+        );
       }
     }
     const reminder = patient.entities.restock_reminder;
     if (reminder) {
       cards.push({
         type: "markdown",
-        content: `**${t(lang, "to_reorder")}**\n\n{{ state_attr(${jq(reminder)}, 'testo') }}`,
+        content:
+          `**${t(lang, "to_reorder")}**\n\n` +
+          `{% for f in state_attr(${jq(reminder)}, 'farmaci') or [] %}- **{{ f.display_name }}**: ` +
+          `{{ ${jq(t(lang, "days_left"))}.replace('{days}', f.days_remaining | float(0) | round(0) | int | string) }}\n{% endfor %}`,
         grid_options: { columns: "full" },
         visibility: [{ condition: "numeric_state", entity: reminder, above: 0 }],
       });
     }
-    if (act) {
-      for (const m of patient.medications) {
-        if (!m.entities.restock_package || !m.entities.low_stock) continue;
-        cards.push({
-          type: "tile",
-          entity: m.entities.restock_package,
-          name: t(lang, "restock", { name: m.name }),
-          icon: "mdi:package-variant-plus",
-          hide_state: true,
-          tap_action: pressAction(m.entities.restock_package, t(lang, "confirm_restock", { name: m.name })),
-          hold_action: { action: "none" },
-          icon_tap_action: { action: "none" },
-          visibility: [isOn(m.entities.low_stock)],
-        });
-      }
-    }
     if (sensor) {
       cards.push({ type: "heading", heading: t(lang, "yesterday"), heading_style: "subtitle" });
       cards.push(dosesTable(lang, sensor, "yesterday", "nothing_missed", true));
+    }
+    // Always visible (not only while low): one tap = one package, so two packages
+    // arriving together are two taps. The button shows the live stock, so it's
+    // clear how many were already counted. Shortest-lasting first (as of loading).
+    const restockable = patient.medications
+      .filter((m) => m.package_size && m.entities.restock_package && m.entities.stock)
+      .sort((a, b) => (a.days_remaining ?? Infinity) - (b.days_remaining ?? Infinity));
+    if (act && restockable.length) {
+      cards.push({ type: "heading", heading: t(lang, "restock_title"), heading_style: "subtitle" });
+      for (const m of restockable) {
+        cards.push({
+          ...rowButton(
+            m.entities.stock,
+            t(lang, "restock", { name: m.display_name }),
+            "mdi:package-variant-plus",
+            pressAction(m.entities.restock_package, t(lang, "confirm_restock", { name: m.display_name }))
+          ),
+          show_state: true,
+        });
+      }
     }
     sections.push({ type: "grid", cards });
   }
