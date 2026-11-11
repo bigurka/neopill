@@ -20,7 +20,7 @@ blueprint:
     ciascun farmaco ancora dovuto.
   domain: automation
   author: bigurka
-  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml
+  source_url: https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_dose_reminder.yaml
   input:
     dose_due_entities:
       name: Sensori "Da assumere"
@@ -50,6 +50,25 @@ blueprint:
           max: 180
           unit_of_measurement: minuti
           mode: box
+    show_buttons:
+      name: Mostra i pulsanti "Assumi tutti" / "Non assunto"
+      description: >-
+        Se disattivato, la notifica è solo un promemoria: toccandola si apre
+        la pagina scelta qui sotto, dove si segnano le assunzioni. La
+        notifica continua a ripetersi finché le dosi non vengono segnate.
+      default: true
+      selector:
+        boolean:
+    open_page:
+      name: Pagina da aprire toccando la notifica
+      description: >-
+        L'indirizzo della pagina di Home Assistant che si apre toccando la
+        notifica, ad esempio la pagina del paziente nella dashboard NeoPill
+        ("/dashboard-neopill/marco": è la parte dell'indirizzo del browser
+        dopo il nome del server). Predefinito: il pannello NeoPill.
+      default: /neopill
+      selector:
+        text:
     max_repeats:
       name: Numero massimo di ripetizioni
       description: >-
@@ -76,6 +95,8 @@ variables:
   dose_due_entities: !input dose_due_entities
   notify_device: !input notify_device
   max_repeats: !input max_repeats
+  show_buttons: !input show_buttons
+  open_page: !input open_page
 
 actions:
   - repeat:
@@ -102,11 +123,14 @@ actions:
               È ora di assumere: {{ farmaci_dovuti | map(attribute='name') | join(', ') }}.
             data:
               tag: "neopill_dose_group_{{ context.id }}"
-              actions:
-                - action: "NEOPILL_TUTTI_ASSUNTI_{{ context.id }}"
-                  title: "Assumi tutti"
-                - action: "NEOPILL_NON_ASSUNTO_{{ context.id }}"
-                  title: "Non assunto"
+              # Tapping the notification body opens this page (clickAction: Android, url: iOS).
+              clickAction: "{{ open_page }}"
+              url: "{{ open_page }}"
+              actions: >-
+                {{ [
+                     {'action': 'NEOPILL_TUTTI_ASSUNTI_' ~ context.id, 'title': 'Assumi tutti'},
+                     {'action': 'NEOPILL_NON_ASSUNTO_' ~ context.id, 'title': 'Non assunto'},
+                   ] if show_buttons else [] }}
         - wait_for_trigger:
             - trigger: event
               event_type: mobile_app_notification_action

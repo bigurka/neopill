@@ -155,6 +155,9 @@ class _TimeSlotButtonBase(ButtonEntity):
             if _medication_uses_time(medication, self._time_str)
         ]
 
+    def _due_medications(self) -> list[Medication]:
+        return [m for m in self._medications() if self._scheduler.is_due(m.id)]
+
 
 class TimeSlotTakeButton(_TimeSlotButtonBase):
     """Logs an intake for every fixed-time medication sharing this time slot."""
@@ -166,7 +169,9 @@ class TimeSlotTakeButton(_TimeSlotButtonBase):
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
-        for medication in self._medications():
+        # Only doses still due: pressing twice, or after taking one medication on its
+        # own, must not log (and subtract from stock) the same dose again.
+        for medication in self._due_medications():
             await async_take_dose(self._store, self._scheduler, medication.id)
 
 
@@ -180,7 +185,7 @@ class TimeSlotMissedButton(_TimeSlotButtonBase):
         self._scheduler = scheduler
 
     async def async_press(self) -> None:
-        for medication in self._medications():
+        for medication in self._due_medications():
             await async_mark_missed(self._store, self._scheduler, medication.id)
 
 

@@ -3,6 +3,7 @@
 // served as-is from the same versioned static path as the full panel.
 import { api, canAct } from "./api.js";
 import { resolveLang, translate } from "./i18n.js";
+import { defineElement } from "./register.js";
 
 const CARD_TAG = "neopill-patient-card";
 const EDITOR_TAG = "neopill-patient-card-editor";
@@ -568,18 +569,11 @@ class NeoPillStockCard extends HTMLElement {
   }
 }
 
-if (!customElements.get(CARD_TAG)) {
-  // Guarded like the strategy: two versions of this script can end up loaded in the
-// same page (e.g. after an update without a full reload), and a second define()
-// of the same tag throws.
-if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, NeoPillPatientCard);
-}
-if (!customElements.get(EDITOR_TAG)) {
-  if (!customElements.get(EDITOR_TAG)) customElements.define(EDITOR_TAG, NeoPillPatientCardEditor);
-}
-if (!customElements.get(STOCK_CARD_TAG)) {
-  if (!customElements.get(STOCK_CARD_TAG)) customElements.define(STOCK_CARD_TAG, NeoPillStockCard);
-}
+// Guarded (two versions of this script can end up in the same page after an update
+// without a full reload) and re-registered if HA swaps the registry: see register.js.
+defineElement(CARD_TAG, NeoPillPatientCard);
+defineElement(EDITOR_TAG, NeoPillPatientCardEditor);
+defineElement(STOCK_CARD_TAG, NeoPillStockCard);
 
 window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === CARD_TAG)) {

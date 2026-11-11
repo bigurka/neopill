@@ -23,6 +23,9 @@
       },
       "restock_reminder": {
         "name": "Farmaci da rifornire"
+      },
+      "today_doses": {
+        "name": "Dosi di oggi"
       }
     },
     "binary_sensor": {

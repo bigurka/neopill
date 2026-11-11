@@ -20,6 +20,7 @@ from homeassistant.components.websocket_api.const import (
     ERR_UNAUTHORIZED,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .access import (
     async_import_ha_users,
@@ -31,7 +32,7 @@ from .access import (
     role_for,
 )
 from .actions import async_mark_missed, async_restock, async_take_dose
-from .const import ASSIGNABLE_ROLES, DEFAULT_OWN_ROLE, ROLE_DOCTOR, WEEKDAY_KEYS
+from .const import ASSIGNABLE_ROLES, DEFAULT_OWN_ROLE, DOMAIN, ROLE_DOCTOR, WEEKDAY_KEYS
 from .models import DoseSchedule, Medication, Patient
 from .panel import async_update_panel_visibility
 from .runtime import get_runtime_data
@@ -72,6 +73,7 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_set_access)
     websocket_api.async_register_command(hass, ws_link_user)
     websocket_api.async_register_command(hass, ws_update_settings)
+    websocket_api.async_register_command(hass, ws_dashboard)
 
 
 def _patient_payload(connection: websocket_api.ActiveConnection, patient: Patient) -> dict[str, Any]:
@@ -580,3 +582,83 @@ async def ws_update_settings(
     if "show_in_sidebar" in fields:
         async_update_panel_visibility(hass, settings["show_in_sidebar"])
     connection.send_result(msg["id"], {"settings": settings})
+
+
+# ---- Dashboard strategy ----
+
+_MEDICATION_ENTITY_KEYS = {
+    "dose_due": "binary_sensor",
+    "low_stock": "binary_sensor",
+    "take_dose": "button",
+    "mark_missed": "button",
+    "restock_package": "button",
+    "stock": "sensor",
+    "days_remaining": "sensor",
+    "next_dose": "sensor",
+}
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN_PREFIX}/dashboard"})
+@websocket_api.async_response
+async def ws_dashboard(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Everything the auto-generated dashboard needs: visible patients, the caller's
+    role, and the real entity_ids (looked up by unique_id, so entities renamed by
+    the user are still found) of each patient's and medication's entities."""
+    runtime = get_runtime_data(hass)
+    registry = er.async_get(hass)
+
+    def entity_id(domain: str, unique_id: str) -> str | None:
+        return registry.async_get_entity_id(domain, DOMAIN, unique_id)
+
+    patients = []
+    for patient in runtime.store.list_patients():
+        role = role_for(connection.user, patient)
+        if not can_view(role):
+            continue
+        medications = []
+        slots: dict[str, list[str]] = {}
+        for medication in runtime.store.list_medications(patient_id=patient.id):
+            schedule = medication.dose_schedule
+            times = set(schedule.fixed_times)
+            for day_times in schedule.weekly_times.values():
+                times.update(day_times)
+            for time_str in times:
+                slots.setdefault(time_str, []).append(medication.id)
+            medications.append(
+                {
+                    "id": medication.id,
+                    "name": medication.name,
+                    "display_name": medication.display_name(),
+                    "dose_amount": medication.dose_amount,
+                    "times": sorted(times),
+                    "entities": {
+                        key: entity_id(domain, f"{medication.id}_{key}")
+                        for key, domain in _MEDICATION_ENTITY_KEYS.items()
+                    },
+                }
+            )
+        patients.append(
+            {
+                "id": patient.id,
+                "name": patient.name,
+                "role": role,
+                "entities": {
+                    "today_doses": entity_id("sensor", f"{patient.id}_today_doses"),
+                    "restock_reminder": entity_id("sensor", f"{patient.id}_restock_reminder"),
+                    "calendar": entity_id("calendar", f"{patient.id}_calendar"),
+                },
+                "medications": medications,
+                "slots": [
+                    {
+                        "time": time_str,
+                        "medication_ids": medication_ids,
+                        "take_all": entity_id("button", f"{patient.id}_{time_str}_take_all"),
+                        "mark_all_missed": entity_id("button", f"{patient.id}_{time_str}_mark_all_missed"),
+                    }
+                    for time_str, medication_ids in sorted(slots.items())
+                ],
+            }
+        )
+    connection.send_result(msg["id"], {"patients": patients})

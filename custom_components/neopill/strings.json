@@ -23,6 +23,9 @@
       },
       "restock_reminder": {
         "name": "Medications to reorder"
+      },
+      "today_doses": {
+        "name": "Today's doses"
       }
     },
     "binary_sensor": {

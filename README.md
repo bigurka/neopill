@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.17.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.18.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -50,8 +50,12 @@ paziente e un dispositivo HA per ogni farmaco.
 - **Pulsanti raggruppati per ora di assunzione**: per ogni orario in comune tra i farmaci di un paziente
   (orari fissi o giorni della settimana) vengono creati automaticamente due pulsanti — "Assumi tutti ore
   HH:MM" e "Segna tutti non assunti ore HH:MM" — che agiscono in un colpo solo su tutti i farmaci di quel
-  paziente previsti a quell'orario. Creati/rimossi automaticamente quando aggiungi, modifichi o elimini un
-  farmaco.
+  paziente previsti a quell'orario e **ancora da prendere** (premuto due volte, o dopo aver già preso un
+  farmaco da solo, non registra due volte la stessa dose). Creati/rimossi automaticamente quando aggiungi,
+  modifichi o elimini un farmaco.
+- **Dosi di oggi**: un sensore per paziente (`sensor.‹paziente›_today_doses`) con l'elenco di tutte le dosi
+  della giornata (e di ieri) e cosa ne è stato — presa alle…, da prendere, più tardi, saltata, nessuna
+  risposta — usato dalla dashboard automatica per mostrare cosa è già stato preso.
 - **Finestra ideale di riordino, per paziente**: due soglie (giorni minimi/massimi, editabili dalla toolbar
   del pannello) pensate per raggruppare più farmaci possibile in un'unica commissione — minimi = non
   aspettare oltre (rischio di rimanere senza), massimi = non troppo presto (rischio di rifiuto del medico
@@ -75,8 +79,8 @@ paziente e un dispositivo HA per ogni farmaco.
   colpo d'occhio assunzioni fuori orario o mancate.
 - **Card Lovelace + dashboard automatica**: oltre al pannello dedicato, è disponibile una card riepilogo
   per paziente (`custom:neopill-patient-card`) da aggiungere su qualsiasi dashboard esistente, e una
-  [strategy](#card-e-dashboard-lovelace) che genera automaticamente una dashboard con una vista per
-  paziente, senza posizionare nulla a mano. Card e strategy si registrano da sole, nessuna risorsa Lovelace
+  [strategy](#card-e-dashboard-lovelace) che genera automaticamente una dashboard fatta solo di card
+  native di Home Assistant, pensata per il paziente anziano e per chi lo assiste. Card e strategy si registrano da sole, nessuna risorsa Lovelace
   da aggiungere manualmente.
 
 ## Installazione
@@ -151,8 +155,9 @@ C'è anche una seconda card, **NeoPill - Situazione scorte** (`custom:neopill-st
 configurazione: una tabella separata per paziente (ordinate per giorni di scorta rimanenti crescenti
 all'interno di ciascuna), con le righe sotto soglia evidenziate.
 
-**Dashboard automatica** (una vista per paziente più una vista scorte, generate da sole, niente card da
-posizionare a mano): crea una nuova dashboard, passa alla modalità YAML e usa:
+**Dashboard automatica**, fatta solo di card native di Home Assistant (nessuna card personalizzata) e
+pensata prima di tutto per il paziente, spesso anziano, e per chi lo assiste. Crea una nuova dashboard,
+passa alla modalità YAML e usa:
 
 ```yaml
 strategy:
@@ -160,10 +165,24 @@ strategy:
 views: []
 ```
 
-La dashboard genererà automaticamente una vista per ciascun paziente esistente (titolo = nome del paziente,
-con la card riepilogo), più una vista finale **"Scorte"** con la tabella di tutti i farmaci di tutti i
-pazienti. Aggiungendo o eliminando un paziente dal pannello NeoPill, ricarica la dashboard per aggiornare
-l'elenco delle viste.
+Viene generata una pagina per ogni paziente che l'utente può vedere:
+
+- **Da prendere adesso**: pulsanti grandi, uno per farmaco, che compaiono solo quando la dose è dovuta; se
+  nella stessa fascia oraria ci sono due o più farmaci, in alto c'è un unico pulsante "Pastiglie delle
+  HH:MM". Ogni tocco chiede conferma ("Hai preso Olmesartan?"), così un tocco per sbaglio non registra
+  nulla. Quando non c'è niente da prendere compare "Nessuna pastiglia da prendere adesso".
+- **Oggi**: tutte le dosi della giornata con lo stato — ✅ presa alle 8:03, ⏰ da prendere, più tardi — così
+  si vede subito cosa è già stato preso ed evitare una doppia dose.
+- **Scorte**: per ogni farmaco "per 24 giorni · 24 rimaste", con ⚠️ quando sta finendo.
+
+Per chi assiste più pazienti (o ha il ruolo Operatore, Medico o Admin) c'è anche la pagina **Riepilogo**:
+per ogni paziente quante dosi sono da prendere, ultima presa e prossima dose, i pulsanti "Saltata" per le
+dosi dovute, i farmaci **da ordinare** con il pulsante "Arrivata una confezione", e le dosi saltate di
+**ieri**. Il Paziente assistito vede tutto ma i tocchi non registrano nulla.
+
+Aggiungendo o eliminando un paziente o un farmaco dal pannello NeoPill, ricarica la dashboard per
+aggiornarla. Le card `custom:neopill-patient-card` e `custom:neopill-stock-card` restano disponibili per
+le dashboard fatte a mano.
 
 ## Blueprint pronte all'uso
 
@@ -172,7 +191,7 @@ l'elenco delle viste.
 Nel repository, sotto `blueprints/automation/bigurka/`, ci sono tre blueprint di automazione Home Assistant
 pronte all'uso (nessuna scrittura di YAML richiesta). Per importarle: Impostazioni → Automazioni e scene →
 Blueprint → Importa blueprint, incollando l'URL della pagina GitHub del file, ad esempio:
-`https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
+`https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
 
 ### `neopill_dose_reminder.yaml` — Promemoria assunzione farmaci
 
@@ -183,6 +202,12 @@ notifica si ripete a intervalli regolari (ricalcolando ogni volta l'elenco ancor
 un altro farmaco diventa dovuto, la notifica si aggiorna **subito**, senza aspettare la ripetizione
 successiva; quando non c'è più nulla di dovuto (hai risposto, o hai già segnato le dosi dal pannello), la
 notifica viene rimossa automaticamente dal telefono.
+
+**Toccando la notifica** si apre la pagina scelta nel campo "Pagina da aprire toccando la notifica" —
+ad esempio la pagina del paziente nella dashboard NeoPill (`/dashboard-neopill/marco`, cioè la parte
+dell'indirizzo del browser dopo il nome del server); predefinito: il pannello NeoPill. Con
+**"Mostra i pulsanti"** disattivato la notifica è solo un promemoria: si tocca, si apre la pagina e si
+segnano lì le assunzioni (la notifica continua a ripetersi finché le dosi non vengono segnate).
 
 **Configurazione consigliata**: una sola automazione per paziente, con *tutti* i sensori `dose_due` di quel
 paziente selezionati nel campo "Sensori 'Da assumere'" — non serve decidere tu le fasce orarie: il
@@ -331,7 +356,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.17.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.18.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
@@ -368,7 +393,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.17.1, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.18.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -396,7 +421,11 @@ patient and an HA device for each medication.
 - **Grouped per-time-slot buttons**: for every time shared by a patient's medications (whether from a
   fixed-times or a weekly schedule), two buttons are created automatically — "Take all at HH:MM" and "Mark
   all missed at HH:MM" — acting in one press on every medication of that patient scheduled at that exact
-  time. Created/removed automatically as you add, edit or delete a medication.
+  time and **still due** (pressed twice, or after one medication was already taken on its own, it never
+  logs the same dose twice). Created/removed automatically as you add, edit or delete a medication.
+- **Today's doses**: one sensor per patient (`sensor.‹patient›_today_doses`) listing every dose of the day
+  (and of yesterday) with what happened to it — taken at…, due, later, skipped, no answer — used by the
+  auto-generated dashboard to show what was already taken.
 - **Per-patient ideal reorder window**: two thresholds (min/max days, editable from the panel toolbar)
   meant to help you batch as many medications as possible into a single pharmacy trip — min = don't leave
   it any later (risk of running out), max = don't order too early (risk of the prescription being refused
@@ -419,7 +448,8 @@ patient and an HA device for each medication.
   at a glance.
 - **Lovelace card + auto-generated dashboard**: besides the dedicated panel, a per-patient summary card
   (`custom:neopill-patient-card`) is available to drop onto any existing dashboard, along with a
-  [strategy](#lovelace-card--dashboard) that auto-generates a full dashboard with one view per patient,
+  [strategy](#lovelace-card--dashboard) that auto-generates a dashboard made only of native Home Assistant
+  cards, designed for elderly patients and whoever assists them,
   with zero manual card placement. Both the card and the strategy register themselves - no Lovelace
   resource to add by hand.
 
@@ -494,8 +524,9 @@ There's also a second card, **NeoPill - Stock overview** (`custom:neopill-stock-
 configuration: a separate table per patient (sorted by days of stock remaining, ascending, within each),
 with rows below threshold highlighted.
 
-**Auto-generated dashboard** (one view per patient plus a stock view, all generated automatically, no card
-placement needed): create a new dashboard, switch it to YAML mode, and use:
+**Auto-generated dashboard**, made only of native Home Assistant cards (no custom cards) and designed
+first of all for the patient - often elderly - and whoever assists them. Create a new dashboard, switch it
+to YAML mode, and use:
 
 ```yaml
 strategy:
@@ -503,9 +534,24 @@ strategy:
 views: []
 ```
 
-The dashboard will automatically generate one view per existing patient (view title = patient name, with the
-summary card), plus a final **"Stock"** view with the all-patients medication table. After adding or
-deleting a patient from the NeoPill panel, reload the dashboard to refresh the list of views.
+It generates one page per patient the user can see:
+
+- **Take now**: big buttons, one per medication, shown only while the dose is due; when two or more
+  medications share a time slot, a single "HH:MM pills" button sits on top. Every tap asks for
+  confirmation ("Did you take Olmesartan?"), so an accidental tap records nothing. When nothing is due it
+  reads "Nothing to take right now".
+- **Today**: every dose of the day with its status - ✅ taken at 8:03, ⏰ to take, later - so it's clear at
+  a glance what was already taken, avoiding a double dose.
+- **Stock**: "for 24 days · 24 left" per medication, with ⚠️ when it's running low.
+
+For whoever assists several patients (or has the Caregiver, Doctor or Admin role) there's also a
+**Summary** page: per patient, how many doses are due, last and next dose, "Skipped" buttons for the due
+doses, the medications **to reorder** with a "Package arrived" button, and **yesterday**'s missed doses.
+Assisted patients see everything, but their taps record nothing.
+
+After adding or deleting a patient or a medication in the NeoPill panel, reload the dashboard to update
+it. The `custom:neopill-patient-card` and `custom:neopill-stock-card` cards remain available for
+hand-made dashboards.
 
 ## Ready-made blueprints
 
@@ -514,7 +560,7 @@ deleting a patient from the NeoPill panel, reload the dashboard to refresh the l
 The repository ships three ready-to-use Home Assistant automation blueprints under
 `blueprints/automation/bigurka/` (no YAML writing required). To import one: Settings → Automations &
 scenes → Blueprints → Import blueprint, pasting the file's GitHub page URL, e.g.
-`https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
+`https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
 
 ### `neopill_dose_reminder.yaml` — dose reminder
 
@@ -525,6 +571,12 @@ regular intervals (recomputing the still-due list each time); if another medicat
 meantime, the notification updates **immediately** instead of waiting for the next repeat; once nothing is
 due anymore (you answered, or already logged the doses from the panel), the notification is cleared from
 the phone automatically.
+
+**Tapping the notification** opens the page set in "Page to open when tapping the notification" - for
+example the patient's page in the NeoPill dashboard (`/dashboard-neopill/marco`, i.e. the part of the
+browser address after the server name); default: the NeoPill panel. With **"Show the buttons"** turned
+off the notification is just a reminder: tap it, the page opens, and the intakes are recorded there (the
+notification keeps repeating until the doses are recorded).
 
 **Recommended setup**: one automation per patient, with *all* of that patient's `dose_due` sensors
 selected in the "'Due' sensors" field - you don't need to decide time slots yourself: grouping happens on
@@ -671,7 +723,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.17.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.18.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
 HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), a Lovelace card plus

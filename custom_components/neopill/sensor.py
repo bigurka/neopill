@@ -3,6 +3,7 @@ plus one per-patient restock-reminder summary sensor.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
@@ -11,7 +12,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
+import homeassistant.util.dt as dt_util
 
 from .const import (
     SIGNAL_DOSE_DUE_CHANGED,
@@ -24,6 +26,7 @@ from .const import (
     SIGNAL_RESTOCK_NOTIFY_CHANGED,
     SIGNAL_RESTOCK_RECORDED,
 )
+from .daily import STATUS_DUE, STATUS_LATER, doses_for_day, last_taken_at
 from .entity import NeoPillMedicationEntity, patient_hub_device_info
 from .models import IntakeEvent, Medication, Patient, RestockEvent
 from .storage import NeoPillStore
@@ -38,7 +41,9 @@ async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddC
 
     @callback
     def _add_for_patient(patient: Patient) -> None:
-        async_add_entities([RestockReminderSensor(store, patient.id)])
+        async_add_entities(
+            [RestockReminderSensor(store, patient.id), TodayDosesSensor(store, scheduler, patient.id)]
+        )
 
     for patient in store.list_patients():
         _add_for_patient(patient)
@@ -350,4 +355,91 @@ class RestockReminderSensor(SensorEntity):
     @callback
     def _handle_midnight(self, _now) -> None:
         self._async_recompute_decision()
+        self.async_write_ha_state()
+
+
+class TodayDosesSensor(SensorEntity):
+    """Per-patient agenda of today's (and yesterday's) scheduled doses.
+
+    State: how many doses are due right now. The "doses" / "yesterday" attributes
+    list every scheduled dose with its status (taken, missed, unanswered, due, later,
+    not_recorded) and when it was recorded, so native dashboard cards can show what's
+    already done - the safeguard against an elderly patient taking a dose twice.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "today_doses"
+    _attr_icon = "mdi:clipboard-check-outline"
+    _attr_should_poll = False
+    # The lists change many times a day and are rebuilt from NeoPill's own history:
+    # no need to copy them into the recorder database on every change.
+    _unrecorded_attributes = frozenset({"doses", "yesterday"})
+
+    def __init__(self, store: NeoPillStore, scheduler, patient_id: str) -> None:
+        self._store = store
+        self._scheduler = scheduler
+        self._patient_id = patient_id
+        self._attr_unique_id = f"{patient_id}_today_doses"
+        patient = store.patients.get(patient_id)
+        if patient is not None:
+            self.entity_id = f"sensor.{patient.slug}_today_doses"
+
+    @property
+    def available(self) -> bool:
+        return self._patient_id in self._store.patients
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        patient = self._store.patients.get(self._patient_id)
+        return patient_hub_device_info(patient) if patient else None
+
+    def _today(self) -> list[dict[str, Any]]:
+        return doses_for_day(self._store, self._scheduler, self._patient_id, dt_util.now().date())
+
+    @property
+    def native_value(self) -> int:
+        return sum(1 for dose in self._today() if dose["status"] == STATUS_DUE)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        today = dt_util.now().date()
+        doses = self._today()
+        upcoming = [
+            self._scheduler.next_dose_at(m.id)
+            for m in self._store.list_medications(patient_id=self._patient_id)
+            if not self._scheduler.is_due(m.id)
+        ]
+        upcoming = [at for at in upcoming if at is not None]
+        last_taken = last_taken_at(self._store, self._patient_id)
+        return {
+            "patient_id": self._patient_id,
+            "doses": doses,
+            "yesterday": doses_for_day(
+                self._store, self._scheduler, self._patient_id, today - timedelta(days=1)
+            ),
+            "remaining_today": sum(1 for d in doses if d["status"] in (STATUS_DUE, STATUS_LATER)),
+            "last_taken": last_taken.isoformat() if last_taken else None,
+            "next_dose": min(upcoming).isoformat() if upcoming else None,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        for signal in (
+            SIGNAL_INTAKE_RECORDED,
+            SIGNAL_DOSE_DUE_CHANGED,
+            SIGNAL_MEDICATION_ADDED,
+            SIGNAL_MEDICATION_UPDATED,
+            SIGNAL_MEDICATION_REMOVED,
+        ):
+            self.async_on_remove(async_dispatcher_connect(self.hass, signal, self._handle_refresh))
+        # "later" turns into "not recorded" with the clock alone, and the day rolls over
+        # at midnight: a periodic refresh covers both without per-dose timers.
+        self.async_on_remove(
+            async_track_time_interval(self.hass, self._handle_refresh, timedelta(minutes=5))
+        )
+        self.async_on_remove(
+            async_track_time_change(self.hass, self._handle_refresh, hour=0, minute=0, second=20)
+        )
+
+    @callback
+    def _handle_refresh(self, *_args) -> None:
         self.async_write_ha_state()

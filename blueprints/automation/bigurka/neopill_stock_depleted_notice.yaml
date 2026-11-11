@@ -9,7 +9,7 @@ blueprint:
     "non assunta" nello storico.
   domain: automation
   author: bigurka
-  source_url: https://github.com/bigurka/neopill/blob/main/blueprints/automation/bigurka/neopill_stock_depleted_notice.yaml
+  source_url: https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_stock_depleted_notice.yaml
   input:
     notify_device:
       name: Dispositivo per la notifica
