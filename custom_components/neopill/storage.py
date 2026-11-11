@@ -283,6 +283,27 @@ class NeoPillStore:
         self._async_delay_save()
         async_dispatcher_send(self._hass, SIGNAL_RESTOCK_NOTIFY_CHANGED, medication_id)
 
+    async def async_set_prescriptions_ready(self, patient_id: str) -> list[Medication]:
+        """Mark the prescriptions for a patient's pending restock as ready.
+
+        Applies to the medications of the current restock batch (the ones the
+        reminder email was about); if there is none, to those running low. Like
+        the notify flag, it skips SIGNAL_MEDICATION_UPDATED (which would make the
+        scheduler recompute doses) and uses the restock-notify signal instead.
+        """
+        patient = self.get_patient(patient_id)
+        medications = [
+            m for m in self.list_medications(patient_id=patient_id) if m.id in patient.restock_previous_decided_ids
+        ] or [m for m in self.list_medications(patient_id=patient_id) if m.is_low_stock()]
+        now = dt_util.utcnow()
+        for medication in medications:
+            medication.prescription_ready_at = now
+        if medications:
+            self._async_delay_save()
+            for medication in medications:
+                async_dispatcher_send(self._hass, SIGNAL_RESTOCK_NOTIFY_CHANGED, medication.id)
+        return medications
+
     async def async_delete_medication(self, medication_id: str) -> None:
         self.get_medication(medication_id)
         del self.medications[medication_id]
@@ -420,6 +441,8 @@ class NeoPillStore:
         else:
             raise ValueError("Either amount or packages must be provided")
         medication.stock_quantity += amount_added
+        # The package that arrived is the one the prescription was for.
+        medication.prescription_ready_at = None
         event = RestockEvent(
             medication_id=medication_id,
             timestamp=dt_util.utcnow(),

@@ -176,6 +176,9 @@ class Medication:
     # notification. Exposed as the "da_notificare" attribute on this medication's
     # low_stock binary sensor.
     restock_notify_pending: bool = False
+    # When the prescription for the pending restock was confirmed ready (e.g. by
+    # the "prescriptions ready" email blueprint). Cleared by the next restock.
+    prescription_ready_at: datetime | None = None
     id: str = field(default_factory=new_id)
 
     def display_name(self) -> str:
@@ -217,6 +220,9 @@ class Medication:
             "notes": self.notes,
             "full_name": self.full_name,
             "restock_notify_pending": self.restock_notify_pending,
+            "prescription_ready_at": (
+                self.prescription_ready_at.isoformat() if self.prescription_ready_at else None
+            ),
         }
 
     @classmethod
@@ -235,6 +241,11 @@ class Medication:
             dose_schedule=DoseSchedule.from_dict(data.get("dose_schedule", {})),
             notes=data.get("notes", ""),
             restock_notify_pending=bool(data.get("restock_notify_pending", False)),
+            prescription_ready_at=(
+                datetime.fromisoformat(data["prescription_ready_at"])
+                if data.get("prescription_ready_at")
+                else None
+            ),
         )
 
 

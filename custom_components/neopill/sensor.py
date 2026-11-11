@@ -291,6 +291,11 @@ class RestockReminderSensor(SensorEntity):
                     "days_remaining": remaining,
                     "stock_quantity": medication.stock_quantity,
                     "data_esaurimento_prevista": depletion_date.isoformat() if depletion_date else None,
+                    "ricetta_pronta_dal": (
+                        medication.prescription_ready_at.isoformat()
+                        if medication.prescription_ready_at
+                        else None
+                    ),
                 }
             )
             lines.append(f"- {display_name}: {remaining} giorni rimanenti")
@@ -302,11 +307,13 @@ class RestockReminderSensor(SensorEntity):
             else f"Nessun farmaco da rifornire nella finestra {window_min}-{window_max} giorni."
         )
         da_notificare = any(m.restock_notify_pending for m in medications)
+        ready = [m.prescription_ready_at for m in medications if m.prescription_ready_at]
         return {
             "farmaci": items,
             "testo": testo,
             "patient_id": self._patient_id,
             "da_notificare": da_notificare,
+            "ricette_pronte_dal": max(ready).isoformat() if ready else None,
         }
 
     async def async_added_to_hass(self) -> None:

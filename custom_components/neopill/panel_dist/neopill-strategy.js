@@ -31,6 +31,7 @@ const TEXT = {
     to_reorder: "Da ordinare",
     restock: "{name} — +1 confezione",
     restock_title: "Rifornimento: un tocco = una confezione",
+    prescription_ready: "✅ ricetta pronta dal {when}",
     skip: "{name} — saltata",
     no_doses: "Nessuna pastiglia programmata.",
     nothing_missed: "Nessuna dose saltata.",
@@ -72,6 +73,7 @@ const TEXT = {
     to_reorder: "To reorder",
     restock: "{name} — +1 package",
     restock_title: "Restock: one tap = one package",
+    prescription_ready: "✅ prescription ready since {when}",
     skip: "{name} — skipped",
     no_doses: "No doses scheduled.",
     nothing_missed: "No missed doses.",
@@ -327,7 +329,9 @@ function summaryView(lang, patients) {
         content:
           `**${t(lang, "to_reorder")}**\n\n` +
           `{% for f in state_attr(${jq(reminder)}, 'farmaci') or [] %}- **{{ f.display_name }}**: ` +
-          `{{ ${jq(t(lang, "days_left"))}.replace('{days}', f.days_remaining | float(0) | round(0) | int | string) }}\n{% endfor %}`,
+          `{{ ${jq(t(lang, "days_left"))}.replace('{days}', f.days_remaining | float(0) | round(0) | int | string) }}` +
+          `{% if f.ricetta_pronta_dal %}{% set r = as_local(as_datetime(f.ricetta_pronta_dal)) %} — ` +
+          `{{ ${jq(t(lang, "prescription_ready"))}.replace('{when}', r.strftime('%d/%m %H:%M')) }}{% endif %}\n{% endfor %}`,
         grid_options: { columns: "full" },
         visibility: [{ condition: "numeric_state", entity: reminder, above: 0 }],
       });

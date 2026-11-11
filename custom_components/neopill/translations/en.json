@@ -142,6 +142,16 @@
           "description": "ID of the intake event to correct."
         }
       }
+    },
+    "segna_ricette_pronte": {
+      "name": "Mark prescriptions ready",
+      "description": "Declares that the prescriptions for a patient's medications to reorder are ready (e.g. the doctor's portal email arrived). The dashboard shows it under \"To reorder\" until the package is recorded as arrived.",
+      "fields": {
+        "patient_id": {
+          "name": "Patient",
+          "description": "Patient ID, available in the \"patient_id\" attribute of their restock_reminder sensor."
+        }
+      }
     }
   }
 }

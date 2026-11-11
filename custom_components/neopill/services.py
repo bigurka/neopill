@@ -26,6 +26,7 @@ SERVICE_SEGNA_NON_ASSUNTA = "segna_non_assunta"
 SERVICE_RIFORNISCI_FARMACO = "rifornisci_farmaco"
 SERVICE_SEGNA_RIFORNIMENTO_NOTIFICATO = "segna_rifornimento_notificato"
 SERVICE_CORREGGI_ASSUNZIONE = "correggi_assunzione"
+SERVICE_SEGNA_RICETTE_PRONTE = "segna_ricette_pronte"
 
 ATTR_MEDICATION_ID = "medication_id"
 ATTR_AMOUNT = "amount"
@@ -57,6 +58,7 @@ _RESTOCK_NOTIFIED_SCHEMA = vol.All(
     cv.has_at_least_one_key(ATTR_MEDICATION_ID, ATTR_PATIENT_ID),
 )
 _CORREGGI_ASSUNZIONE_SCHEMA = vol.Schema({vol.Required(ATTR_EVENT_ID): cv.string})
+_RICETTE_PRONTE_SCHEMA = vol.Schema({vol.Required(ATTR_PATIENT_ID): cv.string})
 
 
 def _validation_error(key: str, **placeholders: str) -> ServiceValidationError:
@@ -139,6 +141,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         runtime = _runtime(hass)
         await async_correct_taken_to_missed(runtime.store, call.data[ATTR_EVENT_ID])
 
+    @_translate_errors
+    async def _handle_ricette_pronte(call: ServiceCall) -> None:
+        runtime = _runtime(hass)
+        await runtime.store.async_set_prescriptions_ready(call.data[ATTR_PATIENT_ID])
+
     hass.services.async_register(DOMAIN, SERVICE_ASSUMI_FARMACO, _handle_take, schema=_TAKE_SCHEMA)
     hass.services.async_register(
         DOMAIN, SERVICE_SEGNA_NON_ASSUNTA, _handle_missed, schema=_MISSED_SCHEMA
@@ -157,4 +164,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_CORREGGI_ASSUNZIONE,
         _handle_correggi_assunzione,
         schema=_CORREGGI_ASSUNZIONE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEGNA_RICETTE_PRONTE, _handle_ricette_pronte, schema=_RICETTE_PRONTE_SCHEMA
     )

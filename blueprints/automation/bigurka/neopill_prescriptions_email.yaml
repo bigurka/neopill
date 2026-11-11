@@ -1,0 +1,123 @@
+blueprint:
+  name: NeoPill - Ricette pronte (email)
+  description: >-
+    Quando nella casella di posta arriva l'email che conferma le ricette (ad
+    esempio quella del portale Eumed "il tuo medico ti ha prescritto delle
+    ricette"), segna in NeoPill le ricette come pronte per i farmaci da
+    rifornire del paziente - la dashboard lo mostra in "Da ordinare" finché
+    non registri la confezione arrivata - e manda una notifica al telefono.
+    Legge le email tramite il sensore posta dell'integrazione MS365 Mail
+    (da HACS): crealo filtrato sul mittente della conferma (Impostazioni →
+    Dispositivi e servizi → MS365 Mail → aggiungi un sensore posta, campo
+    "From"). Conta solo le email degli ultimi 3 giorni arrivate dopo
+    l'ultima volta che l'automazione è scattata.
+  domain: automation
+  author: bigurka
+  source_url: https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_prescriptions_email.yaml
+  input:
+    restock_sensor:
+      name: Sensore rifornimento del paziente
+      description: Il sensore "restock_reminder" NeoPill del paziente a cui si riferiscono le ricette.
+      selector:
+        entity:
+          domain: sensor
+          integration: neopill
+    mail_sensors:
+      name: Sensori posta da controllare
+      description: >-
+        Uno o più sensori posta di MS365 Mail. Per riconoscere anche le
+        parole nel testo dell'email, attiva "Show body" nel sensore.
+      selector:
+        entity:
+          multiple: true
+          domain: sensor
+          integration: ms365_mail
+    senders:
+      name: Mittenti che confermano le ricette
+      description: >-
+        Indirizzi email separati da virgola. Si può aggiungere anche quello
+        della segreteria del medico (es. per la sua risposta con 👍).
+      default: pazienti@eumedweb.com
+      selector:
+        text:
+    keywords:
+      name: Parole da cercare (facoltativo)
+      description: >-
+        Se compilato, l'email deve contenere almeno una di queste parole o
+        frasi (separate da virgola) nell'oggetto o nel testo, ad esempio
+        "prescritto delle ricette". Vuoto: basta il mittente.
+      default: ""
+      selector:
+        text:
+    notify_device:
+      name: Dispositivo per la notifica (facoltativo)
+      description: Il telefono (app Home Assistant) a cui mandare l'avviso "ricette pronte".
+      default: ""
+      selector:
+        device:
+          integration: mobile_app
+    open_page:
+      name: Pagina da aprire toccando la notifica
+      description: Ad esempio la pagina Riepilogo della dashboard NeoPill ("/dashboard-neopill/riepilogo").
+      default: /neopill
+      selector:
+        text:
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input mail_sensors
+    attribute: data
+
+variables:
+  restock_sensor: !input restock_sensor
+  notify_device: !input notify_device
+  open_page: !input open_page
+  senders_text: !input senders
+  keywords_text: !input keywords
+  senders: "{{ senders_text.lower().split(',') | map('trim') | reject('eq', '') | list }}"
+  keywords: "{{ keywords_text.lower().split(',') | map('trim') | reject('eq', '') | list }}"
+  last_run: "{{ this.attributes.last_triggered }}"
+  # Newest email (the list is newest first) from a confirming sender, recent,
+  # after the last run, and containing a keyword if any were given.
+  match: >-
+    {% set ns = namespace(found=none) %}
+    {% for m in (trigger.to_state.attributes.data or []) if ns.found is none %}
+      {% set when = as_datetime(m.get('received')) %}
+      {% set text = ((m.get('subject') or '') ~ ' ' ~ (m.get('body') or '')) | lower %}
+      {% if (m.get('sender') or '') | lower in senders
+            and when is not none
+            and when > now() - timedelta(days=3)
+            and (last_run is none or when > as_datetime(last_run))
+            and (keywords | count == 0 or keywords | select('in', text) | list | count > 0) %}
+        {% set ns.found = m %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.found }}
+  patient_id: "{{ state_attr(restock_sensor, 'patient_id') }}"
+  patient_name: "{{ (device_attr(device_id(restock_sensor), 'name') or '') | replace(' NeoPill', '') }}"
+
+conditions:
+  - condition: template
+    value_template: "{{ match is mapping and (patient_id | string | length) > 0 }}"
+
+actions:
+  - action: neopill.segna_ricette_pronte
+    data:
+      patient_id: "{{ patient_id }}"
+  - if:
+      - condition: template
+        value_template: "{{ notify_device | length > 0 }}"
+    then:
+      - action: "notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}"
+        data:
+          title: "Ricette pronte"
+          message: >-
+            {% set farmaci = state_attr(restock_sensor, 'farmaci') or [] %}
+            {{ 'Le ricette di ' ~ patient_name ~ ' sono pronte: puoi passare in farmacia.' }}{% for f in farmaci %}{{ '\n- ' ~ f.display_name }}{% endfor %}
+          data:
+            tag: "neopill_prescriptions_{{ patient_id }}"
+            clickAction: "{{ open_page }}"
+            url: "{{ open_page }}"

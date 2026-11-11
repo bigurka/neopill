@@ -106,3 +106,20 @@ correggi_assunzione:
       required: true
       selector:
         text:
+
+segna_ricette_pronte:
+  name: Segna ricette pronte
+  description: >-
+    Dichiara che le ricette per i farmaci da rifornire di un paziente sono
+    pronte (es. è arrivata l'email del portale del medico). La dashboard lo
+    mostra in "Da ordinare" finché non viene registrata la confezione
+    arrivata. Usato dal blueprint "Ricette pronte (email)".
+  fields:
+    patient_id:
+      name: Paziente
+      description: >-
+        ID del paziente, disponibile nell'attributo "patient_id" del suo
+        sensore restock_reminder.
+      required: true
+      selector:
+        text:

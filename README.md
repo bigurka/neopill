@@ -20,7 +20,7 @@ Integrazione custom per Home Assistant (compatibile [HACS](https://hacs.xyz)) pe
 di uno o più pazienti: assunzioni, scorte, rifornimenti e promemoria dose, con un calendario nativo HA per
 paziente e un dispositivo HA per ogni farmaco.
 
-> Stato: v0.18.1, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
+> Stato: v0.19.0, in sviluppo attivo. Le funzionalità descritte qui sotto sono tutte implementate; non ancora
 > testata a fondo su un uso quotidiano reale (vedi [Stato del progetto](#stato-del-progetto)).
 
 ## Funzionalità
@@ -193,7 +193,7 @@ le dashboard fatte a mano.
 
 <a id="blueprint-pronte-alluso"></a>
 
-Nel repository, sotto `blueprints/automation/bigurka/`, ci sono tre blueprint di automazione Home Assistant
+Nel repository, sotto `blueprints/automation/bigurka/`, ci sono quattro blueprint di automazione Home Assistant
 pronte all'uso (nessuna scrittura di YAML richiesta). Per importarle: Impostazioni → Automazioni e scene →
 Blueprint → Importa blueprint, incollando l'URL della pagina GitHub del file, ad esempio:
 `https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
@@ -256,6 +256,22 @@ compilato come in una normale automazione. In modalità YAML puoi usare i modell
 - `{{ recipient_name }}` e `{{ sender_name }}` — nome del destinatario e del mittente
 - `{{ email_to }}`, `{{ email_cc }}`, `{{ email_bcc }}` — i destinatari come elenchi di indirizzi, oppure
   `{{ email_to_text }}`, `{{ email_cc_text }}`, `{{ email_bcc_text }}` come testo separato da virgole
+
+### `neopill_prescriptions_email.yaml` — Ricette pronte (email)
+
+Quando nella casella di posta arriva l'email che conferma le ricette — ad esempio quella del portale Eumed
+(`pazienti@eumedweb.com`, "il tuo medico ti ha prescritto delle ricette") — segna in NeoPill **le ricette
+come pronte** per i farmaci da rifornire del paziente e manda una notifica al telefono ("Le ricette di Marco
+sono pronte: puoi passare in farmacia", toccandola si apre la pagina scelta). Nella dashboard, sotto
+"Da ordinare", compare **"✅ ricetta pronta dal 09/11 12:37"** finché non registri la confezione arrivata.
+
+Le email si leggono con l'integrazione [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail): in
+Impostazioni → Dispositivi e servizi → MS365 Mail aggiungi un **sensore posta** con, nel campo **From**,
+l'indirizzo del mittente (es. `pazienti@eumedweb.com`); per cercare parole anche nel testo dell'email attiva
+**Show body**. Nel blueprint scegli quel sensore, il sensore `restock_reminder` del paziente, i mittenti
+che confermano (si può aggiungere anche quello della segreteria del medico) ed eventuali parole da cercare.
+Contano solo le email degli ultimi 3 giorni arrivate dopo l'ultima volta che l'automazione è scattata.
+Lo stesso si può fare da qualsiasi automazione con il servizio `neopill.segna_ricette_pronte`.
 
 ### `neopill_stock_depleted_notice.yaml` — Avviso scorta esaurita durante un'assunzione
 
@@ -361,7 +377,7 @@ dall'icona nella lista integrazioni.
 
 <a id="stato-del-progetto"></a>
 
-v0.18.1: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
+v0.19.0: backend + pannello completi, con device/entity_id organizzati per paziente, entity_id inglesi e
 nomi/interfaccia localizzati, schema settimanale, finestra di riordino per paziente "intelligente" (batch
 automatico, nessuna ripetizione), pannello in tile con pulsanti a icona, fasce orarie a colori nel pannello
 e nello storico, tre blueprint HA pronte all'uso (promemoria di assunzione, rifornimento e correzione
@@ -398,7 +414,7 @@ A custom Home Assistant integration (compatible with [HACS](https://hacs.xyz)) f
 for one or more patients: intakes, stock, restocks and dose reminders, with a native HA calendar per
 patient and an HA device for each medication.
 
-> Status: v0.18.1, actively developed. All features described below are implemented; not yet battle-tested
+> Status: v0.19.0, actively developed. All features described below are implemented; not yet battle-tested
 > on real day-to-day use over a long period (see [Project status](#project-status)).
 
 ## Features
@@ -567,7 +583,7 @@ hand-made dashboards.
 
 <a id="ready-made-blueprints"></a>
 
-The repository ships three ready-to-use Home Assistant automation blueprints under
+The repository ships four ready-to-use Home Assistant automation blueprints under
 `blueprints/automation/bigurka/` (no YAML writing required). To import one: Settings → Automations &
 scenes → Blueprints → Import blueprint, pasting the file's GitHub page URL, e.g.
 `https://github.com/bigurka/neopill/blob/master/blueprints/automation/bigurka/neopill_dose_reminder.yaml`.
@@ -630,6 +646,23 @@ normal automation. In YAML mode you can use these templates:
 - `{{ recipient_name }}` and `{{ sender_name }}` - recipient and sender names
 - `{{ email_to }}`, `{{ email_cc }}`, `{{ email_bcc }}` - the recipients as lists of addresses, or
   `{{ email_to_text }}`, `{{ email_cc_text }}`, `{{ email_bcc_text }}` as comma-separated text
+
+### `neopill_prescriptions_email.yaml` — prescriptions ready (email)
+
+When the email confirming the prescriptions lands in the mailbox - for example the one from the Eumed
+patient portal (`pazienti@eumedweb.com`, "your doctor has prescribed you...") - it marks **the
+prescriptions as ready** in NeoPill for the patient's medications to reorder and sends a phone
+notification ("Marco's prescriptions are ready: you can go to the pharmacy"; tapping it opens the chosen
+page). In the dashboard, under "To reorder", **"✅ prescription ready since 09/11 12:37"** shows until you
+record the package as arrived.
+
+Emails are read through the [MS365 Mail](https://github.com/RogerSelwyn/MS365-Mail) integration: under
+Settings → Devices & services → MS365 Mail add a **mail sensor** with the sender's address in the **From**
+field (e.g. `pazienti@eumedweb.com`); to match words in the email text too, enable **Show body**. In the
+blueprint pick that sensor, the patient's `restock_reminder` sensor, the confirming senders (the doctor's
+office can be added too) and optional words to look for. Only emails from the last 3 days received after
+the automation last fired count. Any automation can do the same with the `neopill.segna_ricette_pronte`
+service.
 
 ### `neopill_stock_depleted_notice.yaml` — stock-depleted notice during an intake
 
@@ -733,7 +766,7 @@ in the integrations list.
 
 <a id="project-status"></a>
 
-v0.18.1: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
+v0.19.0: backend and panel are feature-complete, with per-patient devices/entity_ids, English entity_ids
 with localized names/UI, weekly scheduling, a "smart" per-patient reorder window (automatic batching, no
 repeats), a tiled panel with icon buttons, color-coded time slots in the panel and history, three ready-made
 HA blueprints (dose reminders, restock reminders, and correcting zero-stock intakes), a Lovelace card plus
