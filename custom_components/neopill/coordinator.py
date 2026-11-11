@@ -273,8 +273,10 @@ class DoseScheduler:
         medication = self._store.medications.get(medication_id)
         if medication is not None:
             # The record above recomputed from "now", which already lies past the
-            # next slot: restart from just before it so that slot becomes due.
-            self._recompute(medication, reference=next_at - timedelta(seconds=1))
+            # next slot: restart from the forgotten dose so that slot (next_at)
+            # becomes due. Using "next_at - 1s" would be wrong for interval
+            # schedules, which add the interval to the reference (no time grid).
+            self._recompute(medication, reference=due_at)
 
     def _set_due(self, medication_id: str, is_due: bool) -> None:
         changed = self._is_due.get(medication_id) != is_due
